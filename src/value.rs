@@ -3,7 +3,6 @@ use std::mem::discriminant;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     // Nil,
-
     Bool(bool),
 
     Int8(i8),
@@ -35,28 +34,14 @@ impl Value {
     pub fn plus_noop(&self) -> OperationResult<()> {
         use Value::*;
         match self {
-            Int8(_)
-            | Int16(_)
-            | Int32(_)
-            | Int64(_)
-            | Int(_)
-            | Uint8(_)
-            | Uint16(_)
-            | Uint32(_)
-            | Uint64(_)
-            | Uintptr(_)
-            | Uint(_)
-            | Float32(_)
-            | Float64(_)
-            | Complex64(..)
-            | Complex128(..) => {},
+            Int8(_) | Int16(_) | Int32(_) | Int64(_) | Int(_) | Uint8(_) | Uint16(_)
+            | Uint32(_) | Uint64(_) | Uintptr(_) | Uint(_) | Float32(_) | Float64(_)
+            | Complex64(..) | Complex128(..) => {}
             a => {
-                return Err(TypeError( //FIXME: add proper error message (types etc)
-                    format!(
-                        "Operand must be of number type, got \"{}\"",
-                        a.to_string(),
-                    ),
-                ))
+                return Err(TypeError(
+                    //FIXME: add proper error message (types etc)
+                    format!("Operand must be of number type, got \"{}\"", a.to_string(),),
+                ));
             }
         };
 
@@ -82,12 +67,10 @@ impl Value {
             Complex64(a, a_i) => Complex64(-*a, -*a_i),
             Complex128(a, a_i) => Complex128(-*a, -*a_i),
             a => {
-                return Err(TypeError( //FIXME: add proper error message (types etc)
-                    format!(
-                        "Operand must be of number type, got \"{}\"",
-                        a.to_string(),
-                    ),
-                ))
+                return Err(TypeError(
+                    //FIXME: add proper error message (types etc)
+                    format!("Operand must be of number type, got \"{}\"", a.to_string(),),
+                ));
             }
         };
 
@@ -111,21 +94,23 @@ impl Value {
             (Float32(lhs), Float32(rhs)) => Float32(lhs + rhs),
             (Float64(lhs), Float64(rhs)) => Float64(lhs + rhs),
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Complex64(lhs + rhs, lhs_i + rhs_i),
-            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Complex128(lhs + rhs, lhs_i + rhs_i),
+            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => {
+                Complex128(lhs + rhs, lhs_i + rhs_i)
+            }
             (String(lhs), String(rhs)) => String(lhs.to_string() + rhs),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
         Ok(val)
     }
-    
+
     pub fn sub(&self, other: &Self) -> OperationResult<Self> {
         use Value::*;
         let val = match (self, other) {
@@ -143,14 +128,16 @@ impl Value {
             (Float32(lhs), Float32(rhs)) => Float32(lhs - rhs),
             (Float64(lhs), Float64(rhs)) => Float64(lhs - rhs),
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Complex64(lhs - rhs, lhs_i - rhs_i),
-            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Complex128(lhs - rhs, lhs_i - rhs_i),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => {
+                Complex128(lhs - rhs, lhs_i - rhs_i)
+            }
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
@@ -174,14 +161,16 @@ impl Value {
             (Float32(lhs), Float32(rhs)) => Float32(lhs * rhs),
             (Float64(lhs), Float64(rhs)) => Float64(lhs * rhs),
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Complex64(lhs * rhs, lhs_i * rhs_i),
-            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Complex128(lhs * rhs, lhs_i * rhs_i),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => {
+                Complex128(lhs * rhs, lhs_i * rhs_i)
+            }
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
@@ -205,14 +194,16 @@ impl Value {
             (Float32(lhs), Float32(rhs)) => Float32(lhs / rhs),
             (Float64(lhs), Float64(rhs)) => Float64(lhs / rhs),
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Complex64(lhs / rhs, lhs_i / rhs_i),
-            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Complex128(lhs / rhs, lhs_i / rhs_i),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => {
+                Complex128(lhs / rhs, lhs_i / rhs_i)
+            }
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
@@ -236,14 +227,16 @@ impl Value {
             (Float32(lhs), Float32(rhs)) => Float32(lhs % rhs),
             (Float64(lhs), Float64(rhs)) => Float64(lhs % rhs),
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Complex64(lhs % rhs, lhs_i % rhs_i),
-            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Complex128(lhs % rhs, lhs_i % rhs_i),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => {
+                Complex128(lhs % rhs, lhs_i % rhs_i)
+            }
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
@@ -254,13 +247,12 @@ impl Value {
         use Value::*;
         let val = match self {
             Bool(a) => Bool(!*a),
-            a => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Operand must be of type bool, got \"{}\"",
-                        a.to_string()
-                    ),
-                ))
+            a => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Operand must be of type bool, got \"{}\"",
+                    a.to_string()
+                )));
             }
         };
 
@@ -269,12 +261,11 @@ impl Value {
 
     pub fn equal(&self, other: &Self) -> OperationResult<Self> {
         if discriminant(self) != discriminant(other) {
-            return Err(TypeError(
-                format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    self.to_string(), other.to_string(),
-                ),
-            ))
+            return Err(TypeError(format!(
+                "Both operands must be of same types, got \"{}\" and \"{}\"",
+                self.to_string(),
+                other.to_string(),
+            )));
         }
 
         Ok(Value::Bool(self == other))
@@ -299,13 +290,13 @@ impl Value {
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Bool(lhs > rhs && lhs_i > rhs_i),
             (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Bool(lhs > rhs && lhs_i > rhs_i),
             (String(lhs), String(rhs)) => Bool(lhs > rhs),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
@@ -331,13 +322,13 @@ impl Value {
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Bool(lhs >= rhs && lhs_i >= rhs_i),
             (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Bool(lhs >= rhs && lhs_i >= rhs_i),
             (String(lhs), String(rhs)) => Bool(lhs >= rhs),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
@@ -363,13 +354,13 @@ impl Value {
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Bool(lhs < rhs && lhs_i < rhs_i),
             (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Bool(lhs < rhs && lhs_i < rhs_i),
             (String(lhs), String(rhs)) => Bool(lhs < rhs),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
@@ -395,13 +386,13 @@ impl Value {
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => Bool(lhs <= rhs && lhs_i <= rhs_i),
             (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Bool(lhs <= rhs && lhs_i <= rhs_i),
             (String(lhs), String(rhs)) => Bool(lhs <= rhs),
-            (lhs, rhs) => { //FIXME: add proper error message (types etc)
-                return Err(TypeError(
-                    format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        lhs.to_string(), rhs.to_string(),
-                    ),
-                ))
+            (lhs, rhs) => {
+                //FIXME: add proper error message (types etc)
+                return Err(TypeError(format!(
+                    "Both operands must be of same types, got \"{}\" and \"{}\"",
+                    lhs.to_string(),
+                    rhs.to_string(),
+                )));
             }
         };
 
@@ -409,7 +400,6 @@ impl Value {
     }
 
     fn to_string(&self) -> &'static str {
-        use Value::*;
         match self {
             Self::Bool(_) => Self::TYPE_BOOL,
             Self::Int8(_) => Self::TYPE_INT8,
@@ -449,4 +439,3 @@ impl Value {
     const TYPE_COMPLEX128: &'static str = "complex128";
     const TYPE_STRING: &'static str = "string";
 }
-

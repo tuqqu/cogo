@@ -1,7 +1,8 @@
-use crate::chunk::{Chunk, OpCode};
-use crate::value::{Value, TypeError};
-use std::result;
 use std::collections::LinkedList;
+use std::result;
+
+use crate::chunk::{Chunk, OpCode};
+use crate::value::{TypeError, Value};
 
 #[derive(Debug)]
 struct VmStack<T> {
@@ -14,7 +15,7 @@ type PopResult<T> = result::Result<T, StackUnderflow>;
 impl<T> VmStack<T> {
     fn new() -> Self {
         Self {
-            stack: LinkedList::new()
+            stack: LinkedList::new(),
         }
     }
 
@@ -31,13 +32,19 @@ impl<T> VmStack<T> {
     }
 
     // FIXME: check usage
-    fn reset(&mut self) {
-        self.stack = LinkedList::new()
-    }
+    // fn reset(&mut self) {
+    //     self.stack = LinkedList::new()
+    // }
 }
 
 #[derive(Debug)]
 pub struct Vm;
+
+impl Default for Vm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Vm {
     pub fn new() -> Self {
@@ -81,52 +88,49 @@ impl Vm {
                 OpCode::Return => {
                     let val = stack.pop()?;
                     dbg!(val);
-                    return Ok(())
-                },
-                OpCode::Bool(v)
-                | OpCode::Int(v)
-                | OpCode::Float(v)
-                | OpCode::String(v) => {
+                    return Ok(());
+                }
+                OpCode::Bool(v) | OpCode::Int(v) | OpCode::Float(v) | OpCode::String(v) => {
                     stack.push(v.clone()); //fixme clone
                 }
                 OpCode::Not => {
                     let a = stack.pop()?;
                     stack.push(a.not()?);
-                },
+                }
                 OpCode::Equal => {
                     let b = stack.pop()?;
                     let a = stack.pop()?;
                     stack.push(a.equal(&b)?);
-                },
+                }
                 OpCode::NotEqual => {
                     let b = stack.pop()?;
                     let a = stack.pop()?;
                     stack.push(a.equal(&b)?.not()?);
-                },
+                }
                 OpCode::Greater => {
                     let b = stack.pop()?;
                     let a = stack.pop()?;
                     stack.push(a.greater(&b)?);
-                },
+                }
                 OpCode::GreaterEqual => {
                     let b = stack.pop()?;
                     let a = stack.pop()?;
                     stack.push(a.greater_equal(&b)?);
-                },
+                }
                 OpCode::Less => {
                     let b = stack.pop()?;
                     let a = stack.pop()?;
                     stack.push(a.less(&b)?);
-                },
+                }
                 OpCode::LessEqual => {
                     let b = stack.pop()?;
                     let a = stack.pop()?;
                     stack.push(a.less_equal(&b)?);
-                },
+                }
                 OpCode::Pop => {
                     stack.pop()?;
                 }
-                _ => {},
+                _ => {}
             }
         }
 
@@ -134,6 +138,7 @@ impl Vm {
     }
 }
 
+#[derive(Debug)]
 pub enum VmError {
     Compile,
     Runtime,

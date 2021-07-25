@@ -1,7 +1,7 @@
-use crate::value::Value;
 use std::fmt;
-use std::fmt::Formatter;
+
 use crate::lexer::lexeme::Pos;
+use crate::value::Value;
 
 #[derive(Debug, Clone)]
 pub enum OpCode {
@@ -40,6 +40,12 @@ pub struct Chunk {
     pos: Vec<Pos>,
 }
 
+impl Default for Chunk {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Chunk {
     pub fn new() -> Self {
         Self {
@@ -69,12 +75,7 @@ impl fmt::Debug for Chunk {
         let mut buffer = String::new();
 
         for (i, code) in self.codes.iter().enumerate() {
-            buffer += &format!(
-                "#{:#04b}: {:?} {}\n",
-                i,
-                code,
-                self.pos[i],
-            );
+            buffer += &format!("#{:#04b}: {:?} {}\n", i, code, self.pos[i],);
         }
 
         write!(f, "{}", buffer)

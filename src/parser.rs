@@ -1,13 +1,6 @@
-use crate::lexer::Lexer;
 use crate::chunk::{Chunk, OpCode};
-use crate::lexer::lexeme::{Pos, Token, Lexeme};
-use std::collections::HashMap;
-use std::any::Any;
+use crate::lexer::lexeme::{Lexeme, Token};
 use crate::value::Value;
-
-pub struct Compiler {
-    chunk: Chunk,
-}
 
 pub struct Parser<'a> {
     lexemes: &'a [Lexeme],
@@ -16,6 +9,8 @@ pub struct Parser<'a> {
     errs: Vec<String>,
     panic: bool,
 }
+
+type ParseRule<T> = (Option<fn(&mut T)>, Option<fn(&mut T)>, Precedence);
 
 impl<'a> Parser<'a> {
     pub fn new(lexemes: &'a [Lexeme]) -> Self {
@@ -27,12 +22,8 @@ impl<'a> Parser<'a> {
             panic: false,
         }
     }
-    
-    fn rule(&self, t: &Token) -> (
-        Option<fn(&mut Self)>,
-        Option<fn(&mut Self)>,
-        Precedence,
-    ) {
+
+    fn rule(&self, t: &Token) -> ParseRule<Self> {
         match t {
             Token::LeftParen => (Some(Parser::group), None, Precedence::None),
             Token::RightParen => (None, None, Precedence::None),
@@ -67,7 +58,7 @@ impl<'a> Parser<'a> {
             Token::True => (Some(Parser::literal), None, Precedence::None),
             Token::Var => (None, None, Precedence::None),
             Token::Eof => (None, None, Precedence::None),
-            _ => panic!(44443222),
+            _ => panic!("Unknown token"),
         }
     }
 
@@ -93,7 +84,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-   fn current_is(&mut self, tok: Token) -> bool {
+    fn current_is(&mut self, tok: Token) -> bool {
         if !self.check(tok) {
             return false;
         }
@@ -121,13 +112,8 @@ impl<'a> Parser<'a> {
                 return;
             }
             match self.current().token {
-                Struct
-                | Func
-                | Var
-                | If
-                | For
-                | Return => return,
-                _ => {},
+                Struct | Func | Var | If | For | Return => return,
+                _ => {}
             }
 
             self.advance();
@@ -154,7 +140,8 @@ impl<'a> Parser<'a> {
     }
 
     fn stmt(&mut self) {
-        if self.current_is(Token::Var) { // fixme change just to checking here with matchwihtout istoken andd check func
+        if self.current_is(Token::Var) {
+            //FIXME: change just to checking here with match wihtout is token and check func
             self.stmt_var();
         } else {
             self.expr_stmt();
@@ -171,9 +158,7 @@ impl<'a> Parser<'a> {
         self.parse_precedence(Precedence::Assignment)
     }
 
-    fn stmt_var(&mut self) {
-
-    }
+    fn stmt_var(&mut self) {}
 
     fn string(&mut self) {
         let string = Value::String(self.lexemes[self.current - 1].literal.clone());
@@ -181,17 +166,27 @@ impl<'a> Parser<'a> {
     }
 
     fn int(&mut self) {
-        let int = Value::Int(self.lexemes[self.current - 1].literal.parse::<isize>().unwrap());
+        let int = Value::Int(
+            self.lexemes[self.current - 1]
+                .literal
+                .parse::<isize>()
+                .unwrap(),
+        );
         self.add_code(OpCode::Int(int))
     }
 
     fn float(&mut self) {
-        let float = Value::Float64(self.lexemes[self.current - 1].literal.parse::<f64>().unwrap());
+        let float = Value::Float64(
+            self.lexemes[self.current - 1]
+                .literal
+                .parse::<f64>()
+                .unwrap(),
+        );
         self.add_code(OpCode::Float(float))
     }
 
     fn group(&mut self) {
-        self.expr() ;
+        self.expr();
         self.consume(Token::RightParen, str::to_string("expected parens")); //FIXME
     }
 
@@ -205,7 +200,7 @@ impl<'a> Parser<'a> {
             Token::Plus => OpCode::PlusNoop,
             _ => {
                 return;
-            },
+            }
         };
 
         self.add_code(code)
@@ -214,7 +209,8 @@ impl<'a> Parser<'a> {
     fn parse_precedence(&mut self, prec: Precedence) {
         self.advance();
         let prefix = self.rule(&self.prev().token).0;
-        if prefix.is_none() { //FIXME
+        if prefix.is_none() {
+            //FIXME
             return;
         }
 
@@ -223,7 +219,8 @@ impl<'a> Parser<'a> {
         while prec <= self.rule(&self.current().token).2 {
             self.advance();
             let inflix = self.rule(&self.prev().token).1;
-            if inflix.is_none() { //FIXME
+            if inflix.is_none() {
+                //FIXME
                 return;
             }
 
@@ -250,7 +247,7 @@ impl<'a> Parser<'a> {
             Token::LessEqual => OpCode::LessEqual,
             _ => {
                 return;
-            },
+            }
         };
 
         self.add_code(code)
@@ -262,7 +259,7 @@ impl<'a> Parser<'a> {
             Token::False => OpCode::Bool(Value::Bool(false)),
             _ => {
                 return;
-            },
+            }
         };
 
         self.add_code(code)
@@ -286,7 +283,7 @@ enum Precedence {
     Factor,
     Unary,
     Call,
-    Primary
+    Primary,
 }
 
 impl Precedence {

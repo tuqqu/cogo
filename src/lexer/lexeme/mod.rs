@@ -9,7 +9,7 @@ type Literal = String;
 pub struct Lexeme {
     pub token: Token,
     pub pos: Pos,
-    pub literal: Literal
+    pub literal: Literal,
 }
 
 impl Lexeme {
@@ -40,4 +40,3 @@ impl fmt::Debug for Pos {
         fmt::Display::fmt(&self, f)
     }
 }
-

@@ -1,7 +1,5 @@
-use std::collections::HashMap;
-
 use self::error::LexerError;
-use self::lexeme::{Pos, Token, Lexeme};
+use self::lexeme::{Lexeme, Pos, Token};
 
 mod error;
 pub mod lexeme;
@@ -58,7 +56,7 @@ impl Lexer {
                     Token::Colon
                 };
                 self.add_lexeme(t);
-            },
+            }
             '-' => {
                 let t = if self.match_char('=') {
                     Token::MinusEqual
@@ -68,7 +66,7 @@ impl Lexer {
                     Token::Minus
                 };
                 self.add_lexeme(t);
-            },
+            }
             '+' => {
                 let t = if self.match_char('=') {
                     Token::PlusEqual
@@ -78,7 +76,7 @@ impl Lexer {
                     Token::Plus
                 };
                 self.add_lexeme(t);
-            },
+            }
             '*' => {
                 let t = if self.match_char('=') {
                     Token::AsteriskEqual
@@ -86,7 +84,7 @@ impl Lexer {
                     Token::Asterisk
                 };
                 self.add_lexeme(t);
-            },
+            }
             '%' => {
                 let t = if self.match_char('=') {
                     Token::ModulusEqual
@@ -94,7 +92,7 @@ impl Lexer {
                     Token::Modulus
                 };
                 self.add_lexeme(t);
-            },
+            }
             '&' => {
                 let t = if self.match_char('&') {
                     Token::LogicAnd
@@ -106,7 +104,7 @@ impl Lexer {
                     Token::BitwiseAnd
                 };
                 self.add_lexeme(t);
-            },
+            }
             '|' => {
                 let t = if self.match_char('|') {
                     Token::LogicOr
@@ -116,7 +114,7 @@ impl Lexer {
                     Token::BitwiseOr
                 };
                 self.add_lexeme(t);
-            },
+            }
             '!' => {
                 let t = if self.match_char('=') {
                     Token::BangEqual
@@ -124,7 +122,7 @@ impl Lexer {
                     Token::Bang
                 };
                 self.add_lexeme(t);
-            },
+            }
             '^' => {
                 let t = if self.match_char('=') {
                     Token::BitwiseXorEqual
@@ -132,7 +130,7 @@ impl Lexer {
                     Token::BitwiseXor
                 };
                 self.add_lexeme(t);
-            },
+            }
             '=' => {
                 let t = if self.match_char('=') {
                     Token::EqualEqual
@@ -140,7 +138,7 @@ impl Lexer {
                     Token::Equal
                 };
                 self.add_lexeme(t);
-            },
+            }
             '<' => {
                 let t = if self.match_char('=') {
                     Token::LessEqual
@@ -154,7 +152,7 @@ impl Lexer {
                     Token::Less
                 };
                 self.add_lexeme(t);
-            },
+            }
             '>' => {
                 let t = if self.match_char('=') {
                     Token::GreaterEqual
@@ -168,7 +166,7 @@ impl Lexer {
                     Token::Greater
                 };
                 self.add_lexeme(t);
-            },
+            }
             '/' => {
                 if self.match_char('/') {
                     while self.peek() != '\n' && !self.is_at_end() {
@@ -337,11 +335,10 @@ impl Lexer {
         }
 
         let text = self.src_substr(self.start, self.current);
-        let token = self
-            .keyword(&text as &str);
+        let token = self.keyword(&text as &str);
 
-        if token.is_some() {
-            self.add_lexeme(token.unwrap());
+        if let Some(t) = token {
+            self.add_lexeme(t);
         } else {
             self.add_lexeme_with_literal(Token::Identifier, &text);
         }
@@ -358,7 +355,7 @@ impl Lexer {
     fn pos(&self) -> Pos {
         Pos(self.line, self.pos)
     }
-    
+
     fn keyword(&self, keyword: &str) -> Option<Token> {
         use Token::*;
         let tok = match keyword {
@@ -425,43 +422,17 @@ impl Lexer {
 
     fn is_auto_semicolon(&self) -> bool {
         let last = self.lexemes.last();
-        if last.is_none() {
-            false
-        } else {
+        if let Some(l) = last {
             use Token::*;
-            match last.unwrap().token {
-                RightCurlyBrace
-                | RightParen
-                | Inc
-                | Dec
-                | Return
-                | Fallthrough
-                | Continue
-                | Break
-                | Bool
-                | False
-                | True
-                | Int8
-                | Int16
-                | Int32
-                | Rune
-                | Int64
-                | Int
-                | Uint8
-                | Byte
-                | Uint16
-                | Uint32
-                | Uint64
-                | Uint
-                | Uintptr
-                | Float32
-                | Float64
-                | Complex64
-                | Complex128
-                | String
-                | Identifier => true,
-                _ => false,
-            }
+            matches!(
+                l.token,
+                RightCurlyBrace | RightParen | Inc | Dec | Return | Fallthrough | Continue
+                | Break | Bool | False | True | Int8 | Int16 | Int32 | Rune | Int64 | Int
+                | Uint8 | Byte | Uint16 | Uint32 | Uint64 | Uint | Uintptr | Float32 | Float64
+                | Complex64 | Complex128 | String | Identifier
+            )
+        } else {
+            false
         }
     }
 }
@@ -509,11 +480,6 @@ mod tests {
         let mut lexer = Lexer::new(str::to_string("/* comment"));
         let (lexemes, errs) = lexer.lex();
         assert_eq!(errs, &[LexerError::UnclosedComment(Pos(1, 1))]);
-        assert_eq!(
-            lexemes,
-            &[
-                Lexeme::new(Token::Eof, Pos(1, 1)),
-            ]
-        );
+        assert_eq!(lexemes, &[Lexeme::new(Token::Eof, Pos(1, 1)),]);
     }
 }

@@ -106,11 +106,13 @@ pub enum Token {
 
     Int8,
     Int16,
-    Int32, Rune,
+    Int32,
+    Rune,
     Int64,
     Int,
 
-    Uint8, Byte,
+    Uint8,
+    Byte,
     Uint16,
     Uint32,
     Uint64,

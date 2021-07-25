@@ -1,10 +1,8 @@
-use cogo::chunk::Chunk;
-use cogo::chunk::OpCode;
-use cogo::vm::{Vm, VmResult};
-use std::{env, process, io, fs};
 use std::io::Write;
-use cogo::compiler::{Compiler};
-use cogo::lexer::Lexer;
+use std::{env, fs, io, process};
+
+use cogo::compiler::Compiler;
+use cogo::vm::{Vm, VmResult};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -34,29 +32,37 @@ fn main() {
                 )
             });
 
-            interpret(contents);
+            let res = interpret(contents);
+            //FIXME
+            if res.is_err() {
+                eprintln!("\x1b[0;35m{:#?}\x1b[0m", res);
+                print_error("Error.");
+                process::exit(1);
+            }
         }
     }
-    }
+}
 
 /// Runs REPL mode from stdin.
 fn repl() {
     loop {
         print!("> ");
-        io::stdout()
-            .flush()
-            .unwrap();
+        io::stdout().flush().unwrap();
 
         let mut line: String = String::new();
-        io::stdin()
-            .read_line(&mut line)
-            .unwrap();
+        io::stdin().read_line(&mut line).unwrap();
 
         if line == "\n" {
             break;
         }
 
-        interpret(line);
+        let res = interpret(line);
+        //FIXME
+        if res.is_err() {
+            eprintln!("\x1b[0;35m{:#?}\x1b[0m", res);
+            print_error("Error.");
+            process::exit(1);
+        }
     }
 }
 
@@ -64,14 +70,13 @@ fn interpret(src: String) -> VmResult {
     let mut compiler = Compiler::new();
     let chunk = compiler.compile(src);
 
-    let mut vm = Vm::new();
-    vm.run(&chunk);
+    let vm = Vm::new();
+    vm.run(&chunk)?;
 
-    return Ok(())
+    Ok(())
 }
 
 fn print_error(msg: &str) {
     eprintln!("\x1b[0;31m{}\x1b[0m", msg);
     eprintln!("Run the command with \"--help\" to see help information.");
 }
-

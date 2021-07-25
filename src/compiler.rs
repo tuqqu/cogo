@@ -1,13 +1,16 @@
-use crate::lexer::Lexer;
 use crate::chunk::{Chunk, OpCode};
-use crate::lexer::lexeme::{Pos, Token, Lexeme};
-use std::collections::HashMap;
-use std::any::Any;
-use crate::value::Value;
+use crate::lexer::lexeme::Pos;
+use crate::lexer::Lexer;
 use crate::parser::Parser;
 
 pub struct Compiler {
     chunk: Chunk,
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Compiler {
@@ -19,7 +22,7 @@ impl Compiler {
 
     pub fn compile(&mut self, src: String) -> &Chunk {
         let mut lexer = Lexer::new(src);
-        let (lexemes, errors) = lexer.lex(); //FIXME: handle errs
+        let (lexemes, _errors) = lexer.lex(); //FIXME: handle errs
 
         let mut parser = Parser::new(lexemes);
         self.chunk = parser.parse();
@@ -29,4 +32,3 @@ impl Compiler {
         &self.chunk
     }
 }
-
