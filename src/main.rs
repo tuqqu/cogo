@@ -1,0 +1,77 @@
+use cogo::chunk::Chunk;
+use cogo::chunk::OpCode;
+use cogo::vm::{Vm, VmResult};
+use std::{env, process, io, fs};
+use std::io::Write;
+use cogo::compiler::{Compiler};
+use cogo::lexer::Lexer;
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() == 1 {
+        print_error("Arguments not found.");
+        process::exit(1);
+    }
+
+    match args[1].as_str() {
+        // "-v" | "--version" => {
+        //     print_version();
+        //     process::exit(0);
+        // }
+        // "-h" | "--help" => {
+        //     print_help();
+        //     process::exit(0);
+        // }
+        "-r" | "--repl" => {
+            repl();
+            process::exit(0);
+        }
+        _ => {
+            let contents = fs::read_to_string(&args[1]).unwrap_or_else(|_| {
+                panic!(
+                    "Something went wrong while reading the file \"{}\"",
+                    &args[1]
+                )
+            });
+
+            interpret(contents);
+        }
+    }
+    }
+
+/// Runs REPL mode from stdin.
+fn repl() {
+    loop {
+        print!("> ");
+        io::stdout()
+            .flush()
+            .unwrap();
+
+        let mut line: String = String::new();
+        io::stdin()
+            .read_line(&mut line)
+            .unwrap();
+
+        if line == "\n" {
+            break;
+        }
+
+        interpret(line);
+    }
+}
+
+fn interpret(src: String) -> VmResult {
+    let mut compiler = Compiler::new();
+    let chunk = compiler.compile(src);
+
+    let mut vm = Vm::new();
+    vm.run(&chunk);
+
+    return Ok(())
+}
+
+fn print_error(msg: &str) {
+    eprintln!("\x1b[0;31m{}\x1b[0m", msg);
+    eprintln!("Run the command with \"--help\" to see help information.");
+}
+
