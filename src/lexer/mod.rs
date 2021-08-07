@@ -426,10 +426,39 @@ impl Lexer {
             use Token::*;
             matches!(
                 l.token,
-                RightCurlyBrace | RightParen | Inc | Dec | Return | Fallthrough | Continue
-                | Break | Bool | False | True | Int8 | Int16 | Int32 | Rune | Int64 | Int
-                | Uint8 | Byte | Uint16 | Uint32 | Uint64 | Uint | Uintptr | Float32 | Float64
-                | Complex64 | Complex128 | String | Identifier
+                // RightCurlyBrace
+                RightParen
+                    | Inc
+                    | Dec
+                    | Return
+                    | Fallthrough
+                    | Continue
+                    | Break
+                    | Bool
+                    | False
+                    | True
+                    | Int8
+                    | Int16
+                    | Int32
+                    | Rune
+                    | Int64
+                    | Int
+                    | Uint8
+                    | Byte
+                    | Uint16
+                    | Uint32
+                    | Uint64
+                    | Uint
+                    | Uintptr
+                    | Float32
+                    | Float64
+                    | Complex64
+                    | Complex128
+                    | String
+                    | Identifier
+                    | StringLiteral
+                    | IntLiteral
+                    | FloatLiteral
             )
         } else {
             false

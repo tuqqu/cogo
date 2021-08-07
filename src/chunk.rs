@@ -1,10 +1,11 @@
 use std::fmt;
 
 use crate::lexer::lexeme::Pos;
-use crate::value::Value;
+use crate::value::{ValType, Value};
 
 #[derive(Debug, Clone)]
 pub enum OpCode {
+    Defer,
     // Binary
     Add,
     Subtract,
@@ -23,15 +24,26 @@ pub enum OpCode {
     PlusNoop,
     Not,
 
-    Constant,
     Return,
     Pop,
 
     Bool(Value),
     Int(Value),
+    IntLiteral(Value),
     Float(Value),
+    FloatLiteral(Value),
     String(Value),
     Nil,
+
+    VarGlobal(String, Option<ValType>),
+    VarGlobalNoInit(String, ValType),
+    GetGlobal(String),
+    SetGlobal(String),
+    GetLocal(usize),
+    SetLocal(usize),
+
+    ValidateType(ValType),
+    PutDefaultValue(ValType),
 }
 
 #[derive(Clone)]
@@ -62,12 +74,6 @@ impl Chunk {
     pub fn codes(&self) -> &[OpCode] {
         &self.codes
     }
-
-    //FIXME: do we need it?
-
-    // pub fn clear(&mut self) {
-    //     self.code.clear();
-    // }
 }
 
 impl fmt::Debug for Chunk {
@@ -75,7 +81,7 @@ impl fmt::Debug for Chunk {
         let mut buffer = String::new();
 
         for (i, code) in self.codes.iter().enumerate() {
-            buffer += &format!("#{:#04b}: {:?} {}\n", i, code, self.pos[i],);
+            buffer += &format!("#{}: {:?} {}\n", i, code, self.pos[i],);
         }
 
         write!(f, "{}", buffer)

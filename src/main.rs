@@ -70,8 +70,8 @@ fn interpret(src: String) -> VmResult {
     let mut compiler = Compiler::new();
     let chunk = compiler.compile(src);
 
-    let vm = Vm::new();
-    vm.run(&chunk)?;
+    let mut vm = Vm::new(None);
+    vm.run(chunk)?;
 
     Ok(())
 }

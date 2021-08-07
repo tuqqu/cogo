@@ -31,6 +31,29 @@ pub struct TypeError(pub String); //FIXME: add proper error struct
 type OperationResult<T> = Result<T, TypeError>;
 
 impl Value {
+    pub fn default(val_type: &ValType) -> Self {
+        match val_type {
+            ValType::Bool => Self::Bool(false),
+            ValType::Int8 => Self::Int8(0),
+            ValType::Int16 => Self::Int16(0),
+            ValType::Int32 => Self::Int32(0),
+            ValType::Int64 => Self::Int64(0),
+            ValType::Int => Self::Int(0),
+            ValType::Uint8 => Self::Uint8(0),
+            ValType::Uint16 => Self::Uint16(0),
+            ValType::Uint32 => Self::Uint32(0),
+            ValType::Uint64 => Self::Uint64(0),
+            ValType::Uint => Self::Uint(0),
+            ValType::Uintptr => Self::Uintptr(0),
+            ValType::Float32 => Self::Float32(0_f32),
+            ValType::Float64 => Self::Float64(0_f64),
+            ValType::Complex64 => Self::Complex64(0_f32, 0_f32),
+            ValType::Complex128 => Self::Complex128(0_f64, 0_f64),
+            ValType::String => Self::String(String::from("")),
+            _ => panic!("44"), //FIXME: change to separate errors
+        }
+    }
+
     pub fn plus_noop(&self) -> OperationResult<()> {
         use Value::*;
         match self {
@@ -40,7 +63,10 @@ impl Value {
             a => {
                 return Err(TypeError(
                     //FIXME: add proper error message (types etc)
-                    format!("Operand must be of number type, got \"{}\"", a.to_string(),),
+                    format!(
+                        "Operand must be of number type, got \"{}\"",
+                        a.get_type().name(),
+                    ),
                 ));
             }
         };
@@ -69,7 +95,10 @@ impl Value {
             a => {
                 return Err(TypeError(
                     //FIXME: add proper error message (types etc)
-                    format!("Operand must be of number type, got \"{}\"", a.to_string(),),
+                    format!(
+                        "Operand must be of number type, got \"{}\"",
+                        a.get_type().name(),
+                    ),
                 ));
             }
         };
@@ -102,8 +131,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -135,8 +164,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -168,8 +197,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -201,8 +230,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -234,8 +263,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -251,7 +280,7 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Operand must be of type bool, got \"{}\"",
-                    a.to_string()
+                    a.get_type().name()
                 )));
             }
         };
@@ -263,8 +292,8 @@ impl Value {
         if discriminant(self) != discriminant(other) {
             return Err(TypeError(format!(
                 "Both operands must be of same types, got \"{}\" and \"{}\"",
-                self.to_string(),
-                other.to_string(),
+                self.get_type().name(),
+                other.get_type().name(),
             )));
         }
 
@@ -294,8 +323,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -326,8 +355,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -358,8 +387,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -390,8 +419,8 @@ impl Value {
                 //FIXME: add proper error message (types etc)
                 return Err(TypeError(format!(
                     "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.to_string(),
-                    rhs.to_string(),
+                    lhs.get_type().name(),
+                    rhs.get_type().name(),
                 )));
             }
         };
@@ -399,28 +428,60 @@ impl Value {
         Ok(val)
     }
 
-    fn to_string(&self) -> &'static str {
+    pub fn get_type(&self) -> ValType {
         match self {
-            Self::Bool(_) => Self::TYPE_BOOL,
-            Self::Int8(_) => Self::TYPE_INT8,
-            Self::Int16(_) => Self::TYPE_INT16,
-            Self::Int32(_) => Self::TYPE_INT32,
-            Self::Int64(_) => Self::TYPE_INT64,
-            Self::Int(_) => Self::TYPE_INT,
-            Self::Uint8(_) => Self::TYPE_UINT8,
-            Self::Uint16(_) => Self::TYPE_UINT16,
-            Self::Uint32(_) => Self::TYPE_UINT32,
-            Self::Uint64(_) => Self::TYPE_UINT64,
-            Self::Uint(_) => Self::TYPE_UINT,
-            Self::Uintptr(_) => Self::TYPE_UINTPTR,
-            Self::Float32(_) => Self::TYPE_FLOAT32,
-            Self::Float64(_) => Self::TYPE_FLOAT64,
-            Self::Complex64(..) => Self::TYPE_COMPLEX64,
-            Self::Complex128(..) => Self::TYPE_COMPLEX128,
-            Self::String(_) => Self::TYPE_STRING,
+            Self::Bool(_) => ValType::Bool,
+            Self::Int8(_) => ValType::Int8,
+            Self::Int16(_) => ValType::Int16,
+            Self::Int32(_) => ValType::Int32,
+            Self::Int64(_) => ValType::Int64,
+            Self::Int(_) => ValType::Int,
+            Self::Uint8(_) => ValType::Uint8,
+            Self::Uint16(_) => ValType::Uint16,
+            Self::Uint32(_) => ValType::Uint32,
+            Self::Uint64(_) => ValType::Uint64,
+            Self::Uint(_) => ValType::Uint,
+            Self::Uintptr(_) => ValType::Uintptr,
+            Self::Float32(_) => ValType::Float32,
+            Self::Float64(_) => ValType::Float64,
+            Self::Complex64(..) => ValType::Complex64,
+            Self::Complex128(..) => ValType::Complex128,
+            Self::String(_) => ValType::String,
         }
     }
 
+    pub fn is_of_type(&self, v_type: &ValType) -> bool {
+        self.get_type() == *v_type
+    }
+
+    pub fn same_type(&self, other: &Self) -> bool {
+        discriminant(self) == discriminant(other)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValType {
+    Bool,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Int,
+    Uint8,
+    Uint16,
+    Uint32,
+    Uint64,
+    Uint,
+    Uintptr,
+    Float32,
+    Float64,
+    Complex64,
+    Complex128,
+    String,
+    Struct(String),
+}
+
+impl ValType {
     const TYPE_BOOL: &'static str = "bool";
     const TYPE_INT8: &'static str = "int8";
     const TYPE_INT16: &'static str = "int16";
@@ -438,4 +499,27 @@ impl Value {
     const TYPE_COMPLEX64: &'static str = "complex64";
     const TYPE_COMPLEX128: &'static str = "complex128";
     const TYPE_STRING: &'static str = "string";
+
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Bool => Self::TYPE_BOOL,
+            Self::Int8 => Self::TYPE_INT8,
+            Self::Int16 => Self::TYPE_INT16,
+            Self::Int32 => Self::TYPE_INT32,
+            Self::Int64 => Self::TYPE_INT64,
+            Self::Int => Self::TYPE_INT,
+            Self::Uint8 => Self::TYPE_UINT8,
+            Self::Uint16 => Self::TYPE_UINT16,
+            Self::Uint32 => Self::TYPE_UINT32,
+            Self::Uint64 => Self::TYPE_UINT64,
+            Self::Uint => Self::TYPE_UINT,
+            Self::Uintptr => Self::TYPE_UINTPTR,
+            Self::Float32 => Self::TYPE_FLOAT32,
+            Self::Float64 => Self::TYPE_FLOAT64,
+            Self::Complex64 => Self::TYPE_COMPLEX64,
+            Self::Complex128 => Self::TYPE_COMPLEX128,
+            Self::String => Self::TYPE_STRING,
+            Self::Struct(name) => name,
+        }
+    }
 }
