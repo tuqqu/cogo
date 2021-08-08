@@ -37,6 +37,8 @@ pub enum OpCode {
 
     VarGlobal(String, Option<ValType>),
     VarGlobalNoInit(String, ValType),
+    ConstGlobal(String, Option<ValType>),
+
     GetGlobal(String),
     SetGlobal(String),
     GetLocal(usize),

@@ -41,6 +41,8 @@ impl<'a> Parser<'a> {
     fn decl(&mut self) {
         if self.check_current(Token::Var) {
             self.var_decl();
+        } else if self.check_current(Token::Const) {
+            self.const_decl();
         } else {
             self.stmt();
         }
@@ -87,6 +89,30 @@ impl<'a> Parser<'a> {
         self.consume(Token::Semicolon, "Expected semicolon.".to_string());
     }
 
+    fn const_decl(&mut self) {
+        let name = self
+            .parse_var("Expected const name".to_string())
+            .to_string();
+
+        self.decl_scoped_const(name.clone());
+
+        let val_type = self.parse_type();
+        self.consume(Token::Equal, "Expected const initialiser.".to_string());
+        self.const_expr();
+
+        if self.is_global_scope() {
+            self.add_code(OpCode::ConstGlobal(name, val_type));
+        } else {
+            if let Some(val_type) = val_type {
+                self.add_code(OpCode::ValidateType(val_type));
+            }
+
+            self.scope.init_last();
+        }
+
+        self.consume(Token::Semicolon, "Expected semicolon.".to_string());
+    }
+
     fn rule(&self, t: &Token) -> ParseRule<Self> {
         match t {
             Token::LeftParen => (Some(Self::group), None, Precedence::None),
@@ -121,6 +147,7 @@ impl<'a> Parser<'a> {
             Token::False => (Some(Self::literal), None, Precedence::None),
             Token::True => (Some(Self::literal), None, Precedence::None),
             Token::Var => (None, None, Precedence::None),
+            Token::Const => (None, None, Precedence::None),
             Token::Eof => (None, None, Precedence::None),
             _ => panic!("Unknown token"),
         }
@@ -247,30 +274,44 @@ impl<'a> Parser<'a> {
         self.parse_precedence(Precedence::Assignment)
     }
 
+    // FIXME: make parse only const expressions
+    fn const_expr(&mut self) {
+        self.parse_precedence(Precedence::Assignment)
+    }
+
     fn parse_var(&mut self, msg: String) -> &str {
         self.consume(Token::Identifier, msg);
         &self.prev().literal
     }
 
     fn decl_scoped_var(&mut self, name: String) {
-        let mut err = None;
-        for var in &self.scope.vars {
-            if var.depth != -1 && var.depth < self.scope.depth as isize {
-                break;
-            } else if name == var.name {
-                err = Some("Already a variable with this name in this scope.".to_string());
-            }
-        }
-
-        if let Some(err) = err {
-            self.err(err);
-        }
-
         if self.is_global_scope() {
             return;
         }
 
+        if self.scope.is_already_defined(&name) {
+            self.err(format!(
+                "Already a variable with this name {} in this scope.",
+                name
+            )); //FIXME msg
+        }
+
         self.scope.add_var(name);
+    }
+
+    fn decl_scoped_const(&mut self, name: String) {
+        if self.is_global_scope() {
+            return;
+        }
+
+        if self.scope.is_already_defined(&name) {
+            self.err(format!(
+                "Already a constant with this name {} in this scope.",
+                name
+            )); //FIXME msg
+        }
+
+        self.scope.add_const(name);
     }
 
     fn parse_type(&mut self) -> Option<ValType> {
@@ -331,20 +372,25 @@ impl<'a> Parser<'a> {
     // FIXME: refactor the logic
     fn named_var(&mut self, assign: bool) {
         let name = self.prev().literal.clone();
-        let index = self.scope.resolve(&name);
+        let resolved = self.scope.resolve(&name);
 
         if assign && self.check_current(Token::Equal) {
             self.expr();
 
-            let code = if let Some(i) = index {
-                OpCode::SetLocal(i)
+            let code = if let Some((i, mutable)) = resolved {
+                if mutable {
+                    OpCode::SetLocal(i)
+                } else {
+                    self.err("Trying to assign to a const".to_string());
+                    return;
+                }
             } else {
                 OpCode::SetGlobal(name)
             };
 
             self.add_code(code)
         } else {
-            let code = if let Some(i) = index {
+            let code = if let Some((i, _)) = resolved {
                 if self.scope.vars[i].depth == -1 {
                     OpCode::GetGlobal(name)
                 } else {
@@ -493,13 +539,37 @@ impl Scope {
     }
 
     fn add_var(&mut self, name: String) {
-        self.vars.push(Local { name, depth: -1 });
+        self.vars.push(Local {
+            name,
+            depth: -1,
+            mutable: true,
+        });
     }
 
-    fn resolve(&self, name: &str) -> Option<usize> {
+    fn add_const(&mut self, name: String) {
+        self.vars.push(Local {
+            name,
+            depth: -1,
+            mutable: false,
+        });
+    }
+
+    fn is_already_defined(&self, name: &str) -> bool {
+        for var in &self.vars {
+            if var.depth != -1 && var.depth < self.depth as isize {
+                break;
+            } else if name == var.name {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn resolve(&self, name: &str) -> Option<(usize, bool)> {
         for i in (0..self.vars.len()).rev() {
             if self.vars[i].name == *name {
-                return Some(i);
+                return Some((i, self.vars[i].mutable));
             }
         }
 
@@ -518,5 +588,6 @@ impl Scope {
 #[derive(Debug)]
 struct Local {
     name: String,
+    mutable: bool,
     depth: isize,
 }

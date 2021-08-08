@@ -116,19 +116,15 @@ impl StreamProvider for StdStreamProvider {
     }
 }
 
-pub struct Vm {
-    globals: HashMap<String, Value>,
-    std_streams: Box<dyn StreamProvider>,
+enum VmNamedValue {
+    Var(Value),
+    Const(Value),
 }
 
-// type GlobValue = (String, Value);
-
-// //FIXME check usage
-// impl Default for Vm {
-//     fn default() -> Self {
-//         Self::new()
-//     }
-// }
+pub struct Vm {
+    globals: HashMap<String, VmNamedValue>,
+    std_streams: Box<dyn StreamProvider>,
+}
 
 impl Vm {
     pub fn new(std_streams: Option<Box<dyn StreamProvider>>) -> Self {
@@ -244,7 +240,29 @@ impl Vm {
                         return Err(VmError::Compile); //FIXME: err msg
                     }
 
-                    self.globals.insert(name.clone(), value.clone());
+                    self.globals
+                        .insert(name.clone(), VmNamedValue::Var(value.clone()));
+                    stack.pop()?;
+                }
+                OpCode::ConstGlobal(name, val_type) => {
+                    let value = stack.peek().expect("Cannot retrieve value from stack.");
+                    if let Some(val_type) = val_type {
+                        if !value.is_of_type(val_type) {
+                            eprintln!("\x1b[0;31mValue {:?} is of type {:?} but expected type {:?}\x1b[0m", value, value.get_type(), val_type);
+                            return Err(VmError::Compile); //FIXME: err msg
+                        }
+                    }
+
+                    if self.globals.contains_key(name) {
+                        eprintln!(
+                            "\x1b[0;31m Name \"{}\" already declared in this block.\x1b[0m",
+                            name
+                        );
+                        return Err(VmError::Compile); //FIXME: err msg
+                    }
+
+                    self.globals
+                        .insert(name.clone(), VmNamedValue::Const(value.clone()));
                     stack.pop()?;
                 }
                 OpCode::VarGlobalNoInit(name, val_type) => {
@@ -256,11 +274,16 @@ impl Vm {
                         return Err(VmError::Compile); //FIXME: err msg
                     }
 
-                    self.globals.insert(name.clone(), Value::default(val_type));
+                    self.globals
+                        .insert(name.clone(), VmNamedValue::Var(Value::default(val_type)));
                     // stack.pop()?;
                 }
                 OpCode::GetGlobal(name) => {
                     if let Some(val) = self.globals.get(name) {
+                        let val = match val {
+                            VmNamedValue::Var(val) => val,
+                            VmNamedValue::Const(val) => val,
+                        };
                         stack.push(val.clone());
                     } else {
                         eprintln!("\x1b[0;31m Undefined \"{}\".\x1b[0m", name);
@@ -269,15 +292,25 @@ impl Vm {
                 }
                 OpCode::SetGlobal(name) => {
                     if !self.globals.contains_key(name) {
-                        eprintln!("\x1b[0;31m{:#?}\x1b[0m", "not prev defined");
+                        eprintln!("\x1b[0;31m{:#?}\x1b[0m", "Not previously defined.");
                         return Err(VmError::Compile); //FIXME: err msg
                     }
 
-                    let value = stack.peek().expect("Cannot retrieve value from stack");
+                    let value = stack.peek().expect("Cannot retrieve value from stack.");
                     let old_v = self
                         .globals
-                        .insert(name.clone(), value.clone())
+                        .insert(name.clone(), VmNamedValue::Var(value.clone()))
                         .unwrap_or_else(|| panic!("Old value of \"{}\" not found.", name));
+
+                    if let VmNamedValue::Const(_) = old_v {
+                        eprintln!("\x1b[0;31m Cannot mutate constant \"{}\".\x1b[0m", name);
+                        return Err(VmError::Compile); //FIXME: err msg
+                    }
+
+                    let old_v = match old_v {
+                        VmNamedValue::Var(val) => val,
+                        VmNamedValue::Const(val) => val,
+                    };
 
                     // FIXME: maybe we should store types in a sep hashtable?
                     if !old_v.same_type(value) {
