@@ -11,6 +11,7 @@ pub enum OpCode {
     Subtract,
     Multiply,
     Divide,
+    Remainder,
 
     Equal,
     NotEqual,
@@ -24,6 +25,8 @@ pub enum OpCode {
     PlusNoop,
     Not,
 
+    IfJump(usize),
+    Jump(usize),
     Return,
     Pop,
 
@@ -68,9 +71,19 @@ impl Chunk {
         }
     }
 
-    pub fn write(&mut self, byte: OpCode, pos: Pos) {
+    pub fn write(&mut self, byte: OpCode, pos: Pos) -> usize {
         self.codes.push(byte);
         self.pos.push(pos);
+
+        self.codes.len() - 1
+    }
+
+    pub fn write_at(&mut self, at: usize, byte: OpCode) {
+        if self.codes.len() > at {
+            self.codes[at] = byte;
+        } else {
+            panic!("Trying to overwrite non-existent op code.");
+        }
     }
 
     pub fn codes(&self) -> &[OpCode] {

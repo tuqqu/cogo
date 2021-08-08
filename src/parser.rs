@@ -117,6 +117,7 @@ impl<'a> Parser<'a> {
         match t {
             Token::LeftParen => (Some(Self::group), None, Precedence::None),
             Token::RightParen => (None, None, Precedence::None),
+            Token::LeftCurlyBrace => (None, None, Precedence::None),
             Token::RightCurlyBrace => (None, None, Precedence::None),
             Token::Comma => (None, None, Precedence::None),
             Token::Dot => (None, None, Precedence::None),
@@ -124,6 +125,7 @@ impl<'a> Parser<'a> {
             Token::Plus => (Some(Self::unary), Some(Self::binary), Precedence::Term),
             Token::Semicolon => (None, None, Precedence::None),
             Token::Slash => (None, Some(Self::binary), Precedence::Factor),
+            Token::Modulus => (None, Some(Self::binary), Precedence::Factor),
             Token::Asterisk => (None, Some(Self::binary), Precedence::Factor),
             Token::Bang => (Some(Self::unary), None, Precedence::None),
             Token::BangEqual => (None, Some(Self::binary), Precedence::Equality),
@@ -137,7 +139,8 @@ impl<'a> Parser<'a> {
             Token::StringLiteral => (Some(Self::string), None, Precedence::None),
             Token::IntLiteral => (Some(Self::int), None, Precedence::None),
             Token::FloatLiteral => (Some(Self::float), None, Precedence::None),
-            Token::LogicAnd => (None, None, Precedence::None),
+            Token::LogicAnd => (None, Some(Self::and), Precedence::And),
+            Token::LogicOr => (None, Some(Self::or), Precedence::Or),
             Token::Struct => (None, None, Precedence::None),
             Token::Else => (None, None, Precedence::None),
             Token::For => (None, None, Precedence::None),
@@ -149,7 +152,7 @@ impl<'a> Parser<'a> {
             Token::Var => (None, None, Precedence::None),
             Token::Const => (None, None, Precedence::None),
             Token::Eof => (None, None, Precedence::None),
-            _ => panic!("Unknown token"),
+            tok => panic!("Unknown token {}", tok),
         }
     }
 
@@ -221,13 +224,19 @@ impl<'a> Parser<'a> {
             self.consume(Token::Semicolon, "Expected ';' after value.".to_string());
             self.add_code(OpCode::Defer);
         // FIXME: defer/debug
+        } else if self.check_current(Token::If) {
+            self.stmt_if();
         } else if self.check_current(Token::LeftCurlyBrace) {
-            self.begin_scope();
-            self.block();
-            self.end_scope();
+            self.stmt_block();
         } else {
             self.expr_stmt();
         }
+    }
+
+    fn stmt_block(&mut self) {
+        self.begin_scope();
+        self.block();
+        self.end_scope();
     }
 
     fn begin_scope(&mut self) {
@@ -350,19 +359,67 @@ impl<'a> Parser<'a> {
         Some(val_type)
     }
 
+    fn stmt_if(&mut self) {
+        self.expr();
+        let if_jump = self.add_code(OpCode::IfJump(0));
+        self.add_code(OpCode::Pop);
+
+        self.consume(
+            Token::LeftCurlyBrace,
+            str::to_string("Expected left curly."),
+        ); //FIXME
+        self.stmt_block();
+
+        let jump = self.add_code(OpCode::Jump(0));
+        self.patch_jump(if_jump, OpCode::IfJump);
+
+        self.add_code(OpCode::Pop);
+        if self.check_current(Token::Else) {
+            if self.check_current(Token::If) {
+                self.stmt_if();
+            } else {
+                self.consume(
+                    Token::LeftCurlyBrace,
+                    str::to_string("Expected left curly."),
+                ); //FIXME
+                self.stmt_block();
+            }
+        }
+
+        self.patch_jump(jump, OpCode::Jump);
+    }
+
+    fn and(&mut self, _: bool) {
+        let if_jump = self.add_code(OpCode::IfJump(0));
+        self.add_code(OpCode::Pop);
+        self.parse_precedence(Precedence::And);
+        self.patch_jump(if_jump, OpCode::IfJump);
+    }
+
+    fn or(&mut self, _: bool) {
+        let if_jump = self.add_code(OpCode::IfJump(0));
+        let jump = self.add_code(OpCode::Jump(0));
+
+        self.patch_jump(if_jump, OpCode::IfJump);
+        self.add_code(OpCode::Pop);
+
+        self.parse_precedence(Precedence::Or);
+        self.patch_jump(jump, OpCode::Jump);
+    }
+
     fn string(&mut self, _: bool) {
         let string = Value::String(self.prev().literal.clone());
-        self.add_code(OpCode::String(string))
+        self.add_code(OpCode::String(string));
     }
 
     fn int(&mut self, _: bool) {
         let int = Value::Int(self.prev().literal.parse::<isize>().unwrap());
-        self.add_code(OpCode::IntLiteral(int))
+        self.add_code(OpCode::IntLiteral(int));
     }
 
     fn float(&mut self, _: bool) {
         let float = Value::Float64(self.prev().literal.parse::<f64>().unwrap());
-        self.add_code(OpCode::FloatLiteral(float))
+        self.add_code(OpCode::FloatLiteral(float));
     }
 
     fn var(&mut self, assign: bool) {
@@ -422,7 +479,7 @@ impl<'a> Parser<'a> {
             }
         };
 
-        self.add_code(code)
+        self.add_code(code);
     }
 
     fn parse_precedence(&mut self, prec: Precedence) {
@@ -459,6 +516,7 @@ impl<'a> Parser<'a> {
             Token::Minus => OpCode::Subtract,
             Token::Asterisk => OpCode::Multiply,
             Token::Slash => OpCode::Divide,
+            Token::Modulus => OpCode::Remainder,
             Token::BangEqual => OpCode::NotEqual,
             Token::EqualEqual => OpCode::Equal,
             Token::Greater => OpCode::Greater,
@@ -470,7 +528,7 @@ impl<'a> Parser<'a> {
             }
         };
 
-        self.add_code(code)
+        self.add_code(code);
     }
 
     fn literal(&mut self, _: bool) {
@@ -482,12 +540,17 @@ impl<'a> Parser<'a> {
             }
         };
 
-        self.add_code(code)
+        self.add_code(code);
     }
 
-    fn add_code(&mut self, code: OpCode) {
+    fn add_code(&mut self, code: OpCode) -> usize {
         let pos = self.prev().pos;
-        self.chunk.write(code, pos);
+        self.chunk.write(code, pos)
+    }
+
+    fn patch_jump(&mut self, i: usize, code: fn(usize) -> OpCode) {
+        let jump = self.chunk.codes().len() - 1 - i;
+        self.chunk.write_at(i, code(jump));
     }
 }
 

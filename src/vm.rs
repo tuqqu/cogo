@@ -37,7 +37,10 @@ impl<T> VmStack<T> {
     }
 
     fn retrieve_at(&self, i: usize) -> &T {
-        &self.stack.get(i).expect("Cannot retrieve value from stack.")
+        self
+            .stack
+            .get(i)
+            .expect("Cannot retrieve value from stack.")
     }
 
     fn put_at(&mut self, i: usize, v: T) {
@@ -127,7 +130,13 @@ impl Vm {
 
     pub fn run(&mut self, chunk: &Chunk) -> VmResult {
         let mut stack = VmStack::<Value>::new();
-        for op_code in chunk.codes() {
+        let codes = chunk.codes();
+        let last = codes.len();
+        let mut i = 0;
+
+        while i < last {
+            let op_code = &codes[i];
+
             match op_code {
                 OpCode::PlusNoop => {
                     let a = stack.pop()?;
@@ -157,6 +166,11 @@ impl Vm {
                     let b = stack.pop()?;
                     let a = stack.pop()?;
                     stack.push(a.div(&b)?);
+                }
+                OpCode::Remainder => {
+                    let b = stack.pop()?;
+                    let a = stack.pop()?;
+                    stack.push(a.modulo(&b)?);
                 }
                 OpCode::Return => {
                     // FIXME
@@ -216,12 +230,19 @@ impl Vm {
                     let value = stack.retrieve();
                     if let Some(val_type) = val_type {
                         if !value.is_of_type(val_type) {
-                            return Err(VmError::Compile(format!("Got value of type \"{}\" but expected type \"{}\".", value.get_type().name(), val_type.name()))); //FIXME: err msg
+                            return Err(VmError::Compile(format!(
+                                "Got value of type \"{}\" but expected type \"{}\".",
+                                value.get_type().name(),
+                                val_type.name()
+                            ))); //FIXME: err msg
                         }
                     }
 
                     if self.globals.contains_key(name) {
-                        return Err(VmError::Compile(format!("Name \"{}\" already declared in this block.", name))); //FIXME: err msg
+                        return Err(VmError::Compile(format!(
+                            "Name \"{}\" already declared in this block.",
+                            name
+                        ))); //FIXME: err msg
                     }
 
                     self.globals
@@ -232,12 +253,19 @@ impl Vm {
                     let value = stack.retrieve();
                     if let Some(val_type) = val_type {
                         if !value.is_of_type(val_type) {
-                            return Err(VmError::Compile(format!("Got value of type \"{}\" but expected type \"{}\".", value.get_type().name(), val_type.name()))); //FIXME: err msg
+                            return Err(VmError::Compile(format!(
+                                "Got value of type \"{}\" but expected type \"{}\".",
+                                value.get_type().name(),
+                                val_type.name()
+                            ))); //FIXME: err msg
                         }
                     }
 
                     if self.globals.contains_key(name) {
-                        return Err(VmError::Compile(format!("Name \"{}\" already declared in this block.", name))); //FIXME: err msg
+                        return Err(VmError::Compile(format!(
+                            "Name \"{}\" already declared in this block.",
+                            name
+                        ))); //FIXME: err msg
                     }
 
                     self.globals
@@ -246,7 +274,10 @@ impl Vm {
                 }
                 OpCode::VarGlobalNoInit(name, val_type) => {
                     if self.globals.contains_key(name) {
-                        return Err(VmError::Compile(format!("Name \"{}\" already declared in this block.", name))); //FIXME: err msg
+                        return Err(VmError::Compile(format!(
+                            "Name \"{}\" already declared in this block.",
+                            name
+                        ))); //FIXME: err msg
                     }
 
                     self.globals
@@ -261,12 +292,16 @@ impl Vm {
                         };
                         stack.push(val.clone());
                     } else {
-                        return Err(VmError::Compile(format!("Undefined \"{}\".", name))); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Undefined \"{}\".", name)));
+                        //FIXME: err msg
                     }
                 }
                 OpCode::SetGlobal(name) => {
                     if !self.globals.contains_key(name) {
-                        return Err(VmError::Compile(format!("Name \"{}\" is not previously defined.", name))); //FIXME: err msg
+                        return Err(VmError::Compile(format!(
+                            "Name \"{}\" is not previously defined.",
+                            name
+                        ))); //FIXME: err msg
                     }
 
                     let value = stack.retrieve();
@@ -276,7 +311,10 @@ impl Vm {
                         .unwrap_or_else(|| panic!("Old value of \"{}\" not found.", name));
 
                     if let VmNamedValue::Const(_) = old_v {
-                        return Err(VmError::Compile(format!("Cannot mutate constant \"{}\".", name))); //FIXME: err msg
+                        return Err(VmError::Compile(format!(
+                            "Cannot mutate constant \"{}\".",
+                            name
+                        ))); //FIXME: err msg
                     }
 
                     let old_v = match old_v {
@@ -286,35 +324,59 @@ impl Vm {
 
                     // FIXME: maybe we should store types in a sep hashtable?
                     if !old_v.same_type(value) {
-                        return Err(VmError::Compile(format!("Wrong type \"{}\", expected \"{}\".", value.get_type().name(), old_v.get_type().name()))); //FIXME: err msg
+                        return Err(VmError::Compile(format!(
+                            "Wrong type \"{}\", expected \"{}\".",
+                            value.get_type().name(),
+                            old_v.get_type().name()
+                        ))); //FIXME: err msg
                     }
                     // no pop?
                 }
                 OpCode::GetLocal(i) => {
-                    let value = stack
-                        .retrieve_at(*i)
-                        .clone();
+                    let value = stack.retrieve_at(*i).clone();
                     stack.push(value);
                 }
                 OpCode::SetLocal(i) => {
-                    let value = stack
-                        .retrieve()
-                        .clone();
+                    let value = stack.retrieve().clone();
                     stack.put_at(*i, value);
                 }
                 OpCode::ValidateType(val_type) => {
                     let val = stack.retrieve();
                     if !val.is_of_type(val_type) {
-                        return Err(VmError::Compile(format!("Wrong type \"{}\", expected \"{}\".", val.get_type().name(), val_type.name()))); //FIXME: err msg
+                        return Err(VmError::Compile(format!(
+                            "Wrong type \"{}\", expected \"{}\".",
+                            val.get_type().name(),
+                            val_type.name()
+                        ))); //FIXME: err msg
                     }
                 }
                 OpCode::PutDefaultValue(val_type) => {
                     stack.push(Value::default(val_type));
                 }
+                OpCode::IfJump(j) => {
+                    let value = stack.retrieve();
+                    match value {
+                        Value::Bool(false) => {
+                            i += j;
+                        }
+                        Value::Bool(true) => {}
+                        val => {
+                            return Err(VmError::Compile(format!(
+                                "Wrong type \"{}\" in if condition, expected \"bool\".",
+                                val.get_type().name()
+                            )))
+                        } //FIXME: err msg
+                    }
+                }
+                OpCode::Jump(j) => {
+                    i += j;
+                }
                 _ => {}
             }
             // dbg!(op_code);
             // dbg!(&stack);
+
+            i += 1;
         }
 
         VmResult::Ok(())
