@@ -32,21 +32,12 @@ impl<T> VmStack<T> {
         }
     }
 
-    fn peek(&self) -> Option<&T> {
-        self.stack.last()
+    fn retrieve(&self) -> &T {
+        self.retrieve_at(self.stack.len() - 1)
     }
 
-    fn peek_at(&self, i: usize) -> Option<&T> {
-        if self.stack.is_empty() {
-            None
-        } else {
-            let last = self.stack.len() - 1;
-            if last >= i {
-                Some(&self.stack[i])
-            } else {
-                None
-            }
-        }
+    fn retrieve_at(&self, i: usize) -> &T {
+        &self.stack.get(i).expect("Cannot retrieve value from stack.")
     }
 
     fn put_at(&mut self, i: usize, v: T) {
@@ -168,7 +159,6 @@ impl Vm {
                     stack.push(a.div(&b)?);
                 }
                 OpCode::Return => {
-                    // let val = stack.pop()?;
                     // FIXME
                     // dbg!(val);
                     return Ok(());
@@ -223,21 +213,15 @@ impl Vm {
                     writeln!(self.std_streams.stream_out(), "{:?}", val)?;
                 }
                 OpCode::VarGlobal(name, val_type) => {
-                    let value = stack.peek().expect("Cannot retrieve value from stack.");
-
+                    let value = stack.retrieve();
                     if let Some(val_type) = val_type {
                         if !value.is_of_type(val_type) {
-                            eprintln!("\x1b[0;31mValue {:?} is of type {:?} but expected type {:?}\x1b[0m", value, value.get_type(), val_type);
-                            return Err(VmError::Compile); //FIXME: err msg
+                            return Err(VmError::Compile(format!("Got value of type \"{}\" but expected type \"{}\".", value.get_type().name(), val_type.name()))); //FIXME: err msg
                         }
                     }
 
                     if self.globals.contains_key(name) {
-                        eprintln!(
-                            "\x1b[0;31m Name \"{}\" already declared in this block.\x1b[0m",
-                            name
-                        );
-                        return Err(VmError::Compile); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Name \"{}\" already declared in this block.", name))); //FIXME: err msg
                     }
 
                     self.globals
@@ -245,20 +229,15 @@ impl Vm {
                     stack.pop()?;
                 }
                 OpCode::ConstGlobal(name, val_type) => {
-                    let value = stack.peek().expect("Cannot retrieve value from stack.");
+                    let value = stack.retrieve();
                     if let Some(val_type) = val_type {
                         if !value.is_of_type(val_type) {
-                            eprintln!("\x1b[0;31mValue {:?} is of type {:?} but expected type {:?}\x1b[0m", value, value.get_type(), val_type);
-                            return Err(VmError::Compile); //FIXME: err msg
+                            return Err(VmError::Compile(format!("Got value of type \"{}\" but expected type \"{}\".", value.get_type().name(), val_type.name()))); //FIXME: err msg
                         }
                     }
 
                     if self.globals.contains_key(name) {
-                        eprintln!(
-                            "\x1b[0;31m Name \"{}\" already declared in this block.\x1b[0m",
-                            name
-                        );
-                        return Err(VmError::Compile); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Name \"{}\" already declared in this block.", name))); //FIXME: err msg
                     }
 
                     self.globals
@@ -267,11 +246,7 @@ impl Vm {
                 }
                 OpCode::VarGlobalNoInit(name, val_type) => {
                     if self.globals.contains_key(name) {
-                        eprintln!(
-                            "\x1b[0;31m Name \"{}\" already declared in this block :).\x1b[0m",
-                            name
-                        );
-                        return Err(VmError::Compile); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Name \"{}\" already declared in this block.", name))); //FIXME: err msg
                     }
 
                     self.globals
@@ -286,25 +261,22 @@ impl Vm {
                         };
                         stack.push(val.clone());
                     } else {
-                        eprintln!("\x1b[0;31m Undefined \"{}\".\x1b[0m", name);
-                        return Err(VmError::Compile); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Undefined \"{}\".", name))); //FIXME: err msg
                     }
                 }
                 OpCode::SetGlobal(name) => {
                     if !self.globals.contains_key(name) {
-                        eprintln!("\x1b[0;31m{:#?}\x1b[0m", "Not previously defined.");
-                        return Err(VmError::Compile); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Name \"{}\" is not previously defined.", name))); //FIXME: err msg
                     }
 
-                    let value = stack.peek().expect("Cannot retrieve value from stack.");
+                    let value = stack.retrieve();
                     let old_v = self
                         .globals
                         .insert(name.clone(), VmNamedValue::Var(value.clone()))
                         .unwrap_or_else(|| panic!("Old value of \"{}\" not found.", name));
 
                     if let VmNamedValue::Const(_) = old_v {
-                        eprintln!("\x1b[0;31m Cannot mutate constant \"{}\".\x1b[0m", name);
-                        return Err(VmError::Compile); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Cannot mutate constant \"{}\".", name))); //FIXME: err msg
                     }
 
                     let old_v = match old_v {
@@ -314,33 +286,26 @@ impl Vm {
 
                     // FIXME: maybe we should store types in a sep hashtable?
                     if !old_v.same_type(value) {
-                        eprintln!(
-                            "\x1b[0;31m Wrong type \"{}\", expected \"{}\".\x1b[0m",
-                            value.get_type().name(),
-                            old_v.get_type().name()
-                        );
-                        return Err(VmError::Compile); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Wrong type \"{}\", expected \"{}\".", value.get_type().name(), old_v.get_type().name()))); //FIXME: err msg
                     }
                     // no pop?
                 }
                 OpCode::GetLocal(i) => {
                     let value = stack
-                        .peek_at(*i)
-                        .expect("Cannot retrieve value from stack")
+                        .retrieve_at(*i)
                         .clone();
                     stack.push(value);
                 }
                 OpCode::SetLocal(i) => {
                     let value = stack
-                        .peek()
-                        .expect("Cannot retrieve value from stack")
+                        .retrieve()
                         .clone();
                     stack.put_at(*i, value);
                 }
                 OpCode::ValidateType(val_type) => {
-                    let val = stack.peek().expect("Cannot retrieve value from stack");
+                    let val = stack.retrieve();
                     if !val.is_of_type(val_type) {
-                        return Err(VmError::Compile); //FIXME: err msg
+                        return Err(VmError::Compile(format!("Wrong type \"{}\", expected \"{}\".", val.get_type().name(), val_type.name()))); //FIXME: err msg
                     }
                 }
                 OpCode::PutDefaultValue(val_type) => {
@@ -352,34 +317,31 @@ impl Vm {
             // dbg!(&stack);
         }
 
-        Err(VmError::Runtime)
+        VmResult::Ok(())
     }
 }
 
 #[derive(Debug)]
 pub enum VmError {
-    Compile,
-    Runtime,
+    Compile(String),
+    Runtime(String),
 }
 
 impl From<StackUnderflow> for VmError {
     fn from(_: StackUnderflow) -> Self {
-        eprintln!("\x1b[0;35m{:#?}\x1b[0m", "StackUnderflow");
-        Self::Compile
+        Self::Compile("Stack Underflow error".to_string())
     }
 }
 
 impl From<TypeError> for VmError {
-    fn from(_: TypeError) -> Self {
-        eprintln!("\x1b[0;35m{:#?}\x1b[0m", "Runtime");
-        Self::Runtime
+    fn from(e: TypeError) -> Self {
+        Self::Runtime(e.0)
     }
 }
 
 impl From<io::Error> for VmError {
     fn from(_: Error) -> Self {
-        eprintln!("\x1b[0;35m{:#?}\x1b[0m", "std::io::Error");
-        Self::Runtime
+        Self::Runtime("Runtime error".to_string())
     }
 }
 

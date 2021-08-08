@@ -22,7 +22,14 @@ impl Compiler {
 
     pub fn compile(&mut self, src: String) -> &Chunk {
         let mut lexer = Lexer::new(src);
-        let (lexemes, _errors) = lexer.lex(); //FIXME: handle errs
+        let (lexemes, errors) = lexer.lex(); //FIXME: handle errs
+
+        if !errors.is_empty() {
+            for error in errors {
+                eprintln!("\x1b[0;31m{}\x1b[0m", error);
+            }
+            std::process::exit(1);
+        }
 
         let mut parser = Parser::new(lexemes);
         self.chunk = parser.parse();

@@ -59,7 +59,7 @@ fn repl() {
         let res = interpret(line);
         //FIXME
         if res.is_err() {
-            eprintln!("\x1b[0;35m{:#?}\x1b[0m", res);
+            eprintln!("\x1b[0;31m{:#?}\x1b[0m", res);
             print_error("Error.");
             process::exit(1);
         }

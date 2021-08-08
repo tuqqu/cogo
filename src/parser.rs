@@ -289,7 +289,7 @@ impl<'a> Parser<'a> {
             return;
         }
 
-        if self.scope.is_already_defined(&name) {
+        if self.scope.has_defined(&name) {
             self.err(format!(
                 "Already a variable with this name {} in this scope.",
                 name
@@ -304,7 +304,7 @@ impl<'a> Parser<'a> {
             return;
         }
 
-        if self.scope.is_already_defined(&name) {
+        if self.scope.has_defined(&name) {
             self.err(format!(
                 "Already a constant with this name {} in this scope.",
                 name
@@ -554,7 +554,7 @@ impl Scope {
         });
     }
 
-    fn is_already_defined(&self, name: &str) -> bool {
+    fn has_defined(&self, name: &str) -> bool {
         for var in &self.vars {
             if var.depth != -1 && var.depth < self.depth as isize {
                 break;
