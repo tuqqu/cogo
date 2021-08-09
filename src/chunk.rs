@@ -25,8 +25,13 @@ pub enum OpCode {
     PlusNoop,
     Not,
 
-    IfJump(usize),
+    IfFalseJump(usize),
     Jump(usize),
+    BackJump(usize),
+    BreakJump(usize),
+    DoBreakJump,
+
+    Continue,
     Return,
     Pop,
 

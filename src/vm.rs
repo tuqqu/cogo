@@ -37,8 +37,7 @@ impl<T> VmStack<T> {
     }
 
     fn retrieve_at(&self, i: usize) -> &T {
-        self
-            .stack
+        self.stack
             .get(i)
             .expect("Cannot retrieve value from stack.")
     }
@@ -133,6 +132,7 @@ impl Vm {
         let codes = chunk.codes();
         let last = codes.len();
         let mut i = 0;
+        let mut flag_jump = false;
 
         while i < last {
             let op_code = &codes[i];
@@ -353,7 +353,7 @@ impl Vm {
                 OpCode::PutDefaultValue(val_type) => {
                     stack.push(Value::default(val_type));
                 }
-                OpCode::IfJump(j) => {
+                OpCode::IfFalseJump(j) => {
                     let value = stack.retrieve();
                     match value {
                         Value::Bool(false) => {
@@ -370,6 +370,18 @@ impl Vm {
                 }
                 OpCode::Jump(j) => {
                     i += j;
+                }
+                OpCode::BackJump(j) => {
+                    i -= j;
+                }
+                OpCode::BreakJump(j) => {
+                    if flag_jump {
+                        i += j;
+                        flag_jump = false;
+                    }
+                }
+                OpCode::DoBreakJump => {
+                    flag_jump = true;
                 }
                 _ => {}
             }

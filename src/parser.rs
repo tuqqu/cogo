@@ -9,6 +9,8 @@ pub struct Parser<'a> {
     errs: Vec<String>,
     panic: bool,
     scope: Scope,
+    loop_context: bool,
+    control_jump: usize,
 }
 
 type ParseCallback<T> = fn(&mut T, bool);
@@ -27,6 +29,8 @@ impl<'a> Parser<'a> {
             errs: Vec::new(),
             panic: false,
             scope: Scope::new(),
+            loop_context: false,
+            control_jump: 0,
         }
     }
 
@@ -172,6 +176,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    //FIXME rename
     fn check_current(&mut self, tok: Token) -> bool {
         if !self.check(tok) {
             return false;
@@ -224,10 +229,16 @@ impl<'a> Parser<'a> {
             self.consume(Token::Semicolon, "Expected ';' after value.".to_string());
             self.add_code(OpCode::Defer);
         // FIXME: defer/debug
+        } else if self.check_current(Token::For) {
+            self.stmt_for();
         } else if self.check_current(Token::If) {
             self.stmt_if();
         } else if self.check_current(Token::LeftCurlyBrace) {
             self.stmt_block();
+        } else if self.check_current(Token::Continue) {
+            self.stmt_continue();
+        } else if self.check_current(Token::Break) {
+            self.stmt_break();
         } else {
             self.expr_stmt();
         }
@@ -239,8 +250,40 @@ impl<'a> Parser<'a> {
         self.end_scope();
     }
 
+    fn stmt_continue(&mut self) {
+        if !self.loop_context {
+            self.err("Continue can be used in loops only".to_string());
+        } else {
+            self.add_code(OpCode::BackJump(
+                self.chunk.codes().len() - self.control_jump,
+            ));
+        }
+    }
+
+    fn stmt_break(&mut self) {
+        if !self.loop_context {
+            self.err("Break can be used in loops only".to_string());
+        } else {
+            //FIXME
+            self.add_code(OpCode::DoBreakJump);
+            self.add_code(OpCode::BackJump(
+                self.chunk.codes().len() - self.control_jump,
+            ));
+        }
+    }
+
     fn begin_scope(&mut self) {
         self.scope.depth += 1;
+    }
+
+    fn begin_loop(&mut self) {
+        self.begin_scope();
+        self.loop_context = true;
+    }
+
+    fn end_loop(&mut self) {
+        self.loop_context = false;
+        self.end_scope();
     }
 
     fn end_scope(&mut self) {
@@ -274,9 +317,22 @@ impl<'a> Parser<'a> {
     }
 
     fn expr_stmt(&mut self) {
-        self.expr();
-        self.consume(Token::Semicolon, "Expected semicolon".to_string());
-        self.add_code(OpCode::Pop);
+        if !self.check(Token::Semicolon) {
+            self.expr();
+            self.consume(Token::Semicolon, "Expected semicolon".to_string());
+            self.add_code(OpCode::Pop);
+        } else {
+            self.stmt_empty();
+        }
+    }
+
+    fn last_op_code_index(&self) -> usize {
+        let len = self.chunk.codes().len();
+        if len == 0 {
+            panic!("No opcodes to get the last index of.")
+        }
+
+        len - 1
     }
 
     fn expr(&mut self) {
@@ -359,9 +415,92 @@ impl<'a> Parser<'a> {
         Some(val_type)
     }
 
+    fn stmt_empty(&mut self) {
+        self.consume(Token::Semicolon, "Expected semicolon".to_string());
+    }
+
+    fn stmt_for(&mut self) {
+        self.begin_loop();
+
+        let (for_like, mut exit_jump) = if self.check(Token::Semicolon) {
+            // no init clause
+            // for ; expr; expr {}
+            self.consume(Token::Semicolon, "Expected semicolon".to_string());
+            let jump = self.last_op_code_index();
+
+            (true, jump)
+        } else if self.check(Token::LeftCurlyBrace) {
+            // for {}
+            let jump = self.last_op_code_index();
+            self.add_code(OpCode::Bool(Value::Bool(true)));
+
+            (false, jump)
+        } else {
+            let jump = self.last_op_code_index();
+            self.expr();
+
+            if self.check(Token::Semicolon) {
+                // for expr; expr; expr {}
+                self.consume(Token::Semicolon, "Expected semicolon".to_string());
+                self.add_code(OpCode::Pop);
+                let jump = self.last_op_code_index();
+                (true, jump)
+            } else {
+                // for expr {}
+                (false, jump)
+            }
+        };
+
+        let break_jump = self.add_code(OpCode::BreakJump(0));
+        self.control_jump = exit_jump;
+
+        if for_like {
+            if self.check_current(Token::Semicolon) {
+                self.add_code(OpCode::Bool(Value::Bool(true)));
+            } else {
+                self.expr();
+                self.consume(Token::Semicolon, "Expected semicolon".to_string());
+            }
+        }
+
+        let if_jump = self.add_code(OpCode::IfFalseJump(0));
+        self.add_code(OpCode::Pop);
+
+        // fixme fix first cond && continue
+        if for_like && !self.check(Token::LeftCurlyBrace) {
+            let inc_jump = self.add_code(OpCode::Jump(0));
+            let inc_begin = self.last_op_code_index();
+            self.expr();
+            self.add_code(OpCode::Pop);
+
+            self.add_code(OpCode::BackJump(self.chunk.codes().len() - exit_jump));
+            exit_jump = inc_begin;
+            self.control_jump = exit_jump;
+            self.patch_jump(inc_jump, OpCode::Jump);
+        }
+
+        self.consume(
+            Token::LeftCurlyBrace,
+            str::to_string("Expected left curly."),
+        ); //FIXME
+        self.stmt_block();
+
+        let exit_jump = self.chunk.codes().len() - exit_jump;
+        self.control_jump = exit_jump;
+        self.add_code(OpCode::BackJump(exit_jump));
+
+        self.patch_jump(if_jump, OpCode::IfFalseJump);
+        self.patch_jump_by(1, break_jump, OpCode::BreakJump);
+
+        self.add_code(OpCode::Pop);
+
+        self.loop_context = false;
+        self.end_loop();
+    }
+
     fn stmt_if(&mut self) {
         self.expr();
-        let if_jump = self.add_code(OpCode::IfJump(0));
+        let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
 
         self.consume(
@@ -371,7 +510,7 @@ impl<'a> Parser<'a> {
         self.stmt_block();
 
         let jump = self.add_code(OpCode::Jump(0));
-        self.patch_jump(if_jump, OpCode::IfJump);
+        self.patch_jump(if_jump, OpCode::IfFalseJump);
 
         self.add_code(OpCode::Pop);
         if self.check_current(Token::Else) {
@@ -390,17 +529,17 @@ impl<'a> Parser<'a> {
     }
 
     fn and(&mut self, _: bool) {
-        let if_jump = self.add_code(OpCode::IfJump(0));
+        let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
         self.parse_precedence(Precedence::And);
-        self.patch_jump(if_jump, OpCode::IfJump);
+        self.patch_jump(if_jump, OpCode::IfFalseJump);
     }
 
     fn or(&mut self, _: bool) {
-        let if_jump = self.add_code(OpCode::IfJump(0));
+        let if_jump = self.add_code(OpCode::IfFalseJump(0));
         let jump = self.add_code(OpCode::Jump(0));
 
-        self.patch_jump(if_jump, OpCode::IfJump);
+        self.patch_jump(if_jump, OpCode::IfFalseJump);
         self.add_code(OpCode::Pop);
 
         self.parse_precedence(Precedence::Or);
@@ -548,9 +687,14 @@ impl<'a> Parser<'a> {
         self.chunk.write(code, pos)
     }
 
+    //FIXME just pass a jump with usize inside
     fn patch_jump(&mut self, i: usize, code: fn(usize) -> OpCode) {
-        let jump = self.chunk.codes().len() - 1 - i;
-        self.chunk.write_at(i, code(jump));
+        self.patch_jump_by(0, i, code);
+    }
+
+    fn patch_jump_by(&mut self, by: usize, i: usize, code: fn(usize) -> OpCode) {
+        let jump = self.last_op_code_index() - i;
+        self.chunk.write_at(i, code(jump + by));
     }
 }
 
