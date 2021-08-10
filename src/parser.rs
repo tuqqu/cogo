@@ -35,7 +35,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Chunk {
-        while !self.check_current(Token::Eof) {
+        while !self.consume_if(Token::Eof) {
             self.decl();
         }
 
@@ -43,9 +43,9 @@ impl<'a> Parser<'a> {
     }
 
     fn decl(&mut self) {
-        if self.check_current(Token::Var) {
+        if self.consume_if(Token::Var) {
             self.var_decl();
-        } else if self.check_current(Token::Const) {
+        } else if self.consume_if(Token::Const) {
             self.const_decl();
         } else {
             self.stmt();
@@ -57,13 +57,13 @@ impl<'a> Parser<'a> {
     }
 
     fn var_decl(&mut self) {
-        let name = self.parse_var("Expected var name".to_string()).to_string();
+        let name = self.parse_var().to_string();
 
         self.decl_scoped_var(name.clone());
 
         let val_type = self.parse_type();
 
-        if self.check_current(Token::Equal) {
+        if self.consume_if(Token::Equal) {
             self.expr();
 
             if self.is_global_scope() {
@@ -90,18 +90,18 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.consume(Token::Semicolon, "Expected semicolon.".to_string());
+        self.consume(Token::Semicolon);
     }
 
     fn const_decl(&mut self) {
         let name = self
-            .parse_var("Expected const name".to_string())
+            .parse_var()
             .to_string();
 
         self.decl_scoped_const(name.clone());
 
         let val_type = self.parse_type();
-        self.consume(Token::Equal, "Expected const initialiser.".to_string());
+        self.consume(Token::Equal);
         self.const_expr();
 
         if self.is_global_scope() {
@@ -114,7 +114,7 @@ impl<'a> Parser<'a> {
             self.scope.init_last();
         }
 
-        self.consume(Token::Semicolon, "Expected semicolon.".to_string());
+        self.consume(Token::Semicolon);
     }
 
     fn rule(&self, t: &Token) -> ParseRule<Self> {
@@ -168,16 +168,15 @@ impl<'a> Parser<'a> {
         &self.lexemes[self.current - 1]
     }
 
-    fn consume(&mut self, tok: Token, msg: String) {
+    fn consume(&mut self, tok: Token) {
         if self.current().token == tok {
             self.advance();
         } else {
-            self.err(msg);
+            self.err(format!("Expected token \"{}\", got \"{}\"", tok, self.current().token));
         }
     }
 
-    //FIXME rename
-    fn check_current(&mut self, tok: Token) -> bool {
+    fn consume_if(&mut self, tok: Token) -> bool {
         if !self.check(tok) {
             return false;
         }
@@ -198,10 +197,9 @@ impl<'a> Parser<'a> {
         self.panic = true;
         //FIXME: consider passing a handler
         eprintln!(
-            "\x1b[0;31m error {:#?} {:?} {:#?}\x1b[0m",
+            "\x1b[0;31m{} Error: {}\x1b[0m",
+            self.current().pos,
             msg,
-            self.current(),
-            self.current().pos
         );
         self.errs.push(msg);
     }
@@ -224,20 +222,20 @@ impl<'a> Parser<'a> {
 
     fn stmt(&mut self) {
         // FIXME: change defer/debug
-        if self.check_current(Token::Defer) {
+        if self.consume_if(Token::Defer) {
             self.expr();
-            self.consume(Token::Semicolon, "Expected ';' after value.".to_string());
+            self.consume(Token::Semicolon);
             self.add_code(OpCode::Defer);
         // FIXME: defer/debug
-        } else if self.check_current(Token::For) {
+        } else if self.consume_if(Token::For) {
             self.stmt_for();
-        } else if self.check_current(Token::If) {
+        } else if self.consume_if(Token::If) {
             self.stmt_if();
-        } else if self.check_current(Token::LeftCurlyBrace) {
+        } else if self.consume_if(Token::LeftCurlyBrace) {
             self.stmt_block();
-        } else if self.check_current(Token::Continue) {
+        } else if self.consume_if(Token::Continue) {
             self.stmt_continue();
-        } else if self.check_current(Token::Break) {
+        } else if self.consume_if(Token::Break) {
             self.stmt_break();
         } else {
             self.expr_stmt();
@@ -252,24 +250,25 @@ impl<'a> Parser<'a> {
 
     fn stmt_continue(&mut self) {
         if !self.loop_context {
-            self.err("Continue can be used in loops only".to_string());
-        } else {
-            self.add_code(OpCode::BackJump(
-                self.chunk.codes().len() - self.control_jump,
-            ));
+            self.err("\"continue\" can be used in loops only".to_string());
+            return;
         }
+
+        self.add_code(OpCode::BackJump(
+            self.chunk.codes().len() - self.control_jump,
+        ));
     }
 
     fn stmt_break(&mut self) {
         if !self.loop_context {
-            self.err("Break can be used in loops only".to_string());
-        } else {
-            //FIXME
-            self.add_code(OpCode::DoBreakJump);
-            self.add_code(OpCode::BackJump(
-                self.chunk.codes().len() - self.control_jump,
-            ));
+            self.err("\"break\" can be used in loops only".to_string());
+            return;
         }
+
+        self.add_code(OpCode::DoBreakJump);
+        self.add_code(OpCode::BackJump(
+            self.chunk.codes().len() - self.control_jump,
+        ));
     }
 
     fn begin_scope(&mut self) {
@@ -313,13 +312,13 @@ impl<'a> Parser<'a> {
             self.decl();
         }
 
-        self.consume(Token::RightCurlyBrace, "Expected } after block".to_string());
+        self.consume(Token::RightCurlyBrace);
     }
 
     fn expr_stmt(&mut self) {
         if !self.check(Token::Semicolon) {
             self.expr();
-            self.consume(Token::Semicolon, "Expected semicolon".to_string());
+            self.consume(Token::Semicolon);
             self.add_code(OpCode::Pop);
         } else {
             self.stmt_empty();
@@ -344,8 +343,8 @@ impl<'a> Parser<'a> {
         self.parse_precedence(Precedence::Assignment)
     }
 
-    fn parse_var(&mut self, msg: String) -> &str {
-        self.consume(Token::Identifier, msg);
+    fn parse_var(&mut self) -> &str {
+        self.consume(Token::Identifier);
         &self.prev().literal
     }
 
@@ -355,10 +354,7 @@ impl<'a> Parser<'a> {
         }
 
         if self.scope.has_defined(&name) {
-            self.err(format!(
-                "Already a variable with this name {} in this scope.",
-                name
-            )); //FIXME msg
+            self.err(format!("redeclared \"{}\" in this scope.", name));
         }
 
         self.scope.add_var(name);
@@ -370,10 +366,7 @@ impl<'a> Parser<'a> {
         }
 
         if self.scope.has_defined(&name) {
-            self.err(format!(
-                "Already a constant with this name {} in this scope.",
-                name
-            )); //FIXME msg
+            self.err(format!("redeclared {} in this scope.", name));
         }
 
         self.scope.add_const(name);
@@ -416,7 +409,7 @@ impl<'a> Parser<'a> {
     }
 
     fn stmt_empty(&mut self) {
-        self.consume(Token::Semicolon, "Expected semicolon".to_string());
+        self.consume(Token::Semicolon);
     }
 
     fn stmt_for(&mut self) {
@@ -425,7 +418,7 @@ impl<'a> Parser<'a> {
         let (for_like, mut exit_jump) = if self.check(Token::Semicolon) {
             // no init clause
             // for ; expr; expr {}
-            self.consume(Token::Semicolon, "Expected semicolon".to_string());
+            self.consume(Token::Semicolon);
             let jump = self.last_op_code_index();
 
             (true, jump)
@@ -441,7 +434,7 @@ impl<'a> Parser<'a> {
 
             if self.check(Token::Semicolon) {
                 // for expr; expr; expr {}
-                self.consume(Token::Semicolon, "Expected semicolon".to_string());
+                self.consume(Token::Semicolon);
                 self.add_code(OpCode::Pop);
                 let jump = self.last_op_code_index();
                 (true, jump)
@@ -451,25 +444,27 @@ impl<'a> Parser<'a> {
             }
         };
 
-        let break_jump = self.add_code(OpCode::BreakJump(0));
-        self.control_jump = exit_jump;
-
         if for_like {
-            if self.check_current(Token::Semicolon) {
+            if self.consume_if(Token::Semicolon) {
                 self.add_code(OpCode::Bool(Value::Bool(true)));
             } else {
                 self.expr();
-                self.consume(Token::Semicolon, "Expected semicolon".to_string());
+                self.consume(Token::Semicolon);
             }
         }
 
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
 
+        let break_jump;
         // fixme fix first cond && continue
         if for_like && !self.check(Token::LeftCurlyBrace) {
             let inc_jump = self.add_code(OpCode::Jump(0));
             let inc_begin = self.last_op_code_index();
+
+            break_jump = self.add_code(OpCode::BreakJump(0));
+            self.control_jump = exit_jump;
+
             self.expr();
             self.add_code(OpCode::Pop);
 
@@ -477,12 +472,12 @@ impl<'a> Parser<'a> {
             exit_jump = inc_begin;
             self.control_jump = exit_jump;
             self.patch_jump(inc_jump, OpCode::Jump);
+        } else {
+            break_jump = self.add_code(OpCode::BreakJump(0));
+            self.control_jump = exit_jump;
         }
 
-        self.consume(
-            Token::LeftCurlyBrace,
-            str::to_string("Expected left curly."),
-        ); //FIXME
+        self.consume(Token::LeftCurlyBrace);
         self.stmt_block();
 
         let exit_jump = self.chunk.codes().len() - exit_jump;
@@ -503,24 +498,18 @@ impl<'a> Parser<'a> {
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
 
-        self.consume(
-            Token::LeftCurlyBrace,
-            str::to_string("Expected left curly."),
-        ); //FIXME
+        self.consume(Token::LeftCurlyBrace);
         self.stmt_block();
 
         let jump = self.add_code(OpCode::Jump(0));
         self.patch_jump(if_jump, OpCode::IfFalseJump);
 
         self.add_code(OpCode::Pop);
-        if self.check_current(Token::Else) {
-            if self.check_current(Token::If) {
+        if self.consume_if(Token::Else) {
+            if self.consume_if(Token::If) {
                 self.stmt_if();
             } else {
-                self.consume(
-                    Token::LeftCurlyBrace,
-                    str::to_string("Expected left curly."),
-                ); //FIXME
+                self.consume(Token::LeftCurlyBrace);
                 self.stmt_block();
             }
         }
@@ -570,7 +559,7 @@ impl<'a> Parser<'a> {
         let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
 
-        if assign && self.check_current(Token::Equal) {
+        if assign && self.consume_if(Token::Equal) {
             self.expr();
 
             let code = if let Some((i, mutable)) = resolved {
@@ -602,7 +591,7 @@ impl<'a> Parser<'a> {
 
     fn group(&mut self, _: bool) {
         self.expr();
-        self.consume(Token::RightParen, str::to_string("Expected parens.")); //FIXME
+        self.consume(Token::RightParen);
     }
 
     fn unary(&mut self, _: bool) {

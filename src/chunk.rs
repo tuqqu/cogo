@@ -87,7 +87,7 @@ impl Chunk {
         if self.codes.len() > at {
             self.codes[at] = byte;
         } else {
-            panic!("Trying to overwrite non-existent op code.");
+            panic!("Trying to overwrite a non-existent op code.");
         }
     }
 
