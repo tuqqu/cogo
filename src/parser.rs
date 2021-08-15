@@ -35,6 +35,8 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> Chunk {
+        self.add_code(OpCode::Noop);
+
         while !self.consume_if(Token::Eof) {
             self.decl();
         }

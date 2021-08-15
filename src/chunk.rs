@@ -6,6 +6,13 @@ use crate::value::{ValType, Value};
 #[derive(Debug, Clone)]
 pub enum OpCode {
     Defer,
+    Noop,
+
+    // Unary
+    Negate,
+    PlusNoop,
+    Not,
+
     // Binary
     Add,
     Subtract,
@@ -19,11 +26,6 @@ pub enum OpCode {
     GreaterEqual,
     Less,
     LessEqual,
-
-    // Unary
-    Negate,
-    PlusNoop,
-    Not,
 
     Switch,
     DefaultJump(usize),

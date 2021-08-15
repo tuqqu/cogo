@@ -33,6 +33,12 @@ impl Lexer {
             self.token();
         }
 
+        if let Some(lexeme) = self.lexemes.last() {
+            if lexeme.token != Token::Semicolon {
+                self.lexemes.push(Lexeme::new(Token::Semicolon, self.pos()));
+            }
+        }
+
         self.lexemes.push(Lexeme::new(Token::Eof, self.pos()));
 
         (&self.lexemes, &self.errors)
@@ -426,7 +432,6 @@ impl Lexer {
             use Token::*;
             matches!(
                 l.token,
-                // RightCurlyBrace
                 RightParen
                     | Inc
                     | Dec
@@ -487,6 +492,7 @@ mod tests {
                 Lexeme::new_with_literal(Token::Identifier, Pos(1, 21), String::from("y")),
                 Lexeme::new(Token::ColonEqual, Pos(1, 23)),
                 Lexeme::new_with_literal(Token::StringLiteral, Pos(1, 26), String::from("str")),
+                Lexeme::new(Token::Semicolon, Pos(1, 29)),
                 Lexeme::new(Token::Eof, Pos(1, 29)),
             ]
         );
@@ -502,6 +508,7 @@ mod tests {
             &[
                 Lexeme::new_with_literal(Token::Identifier, Pos(1, 1), String::from("y")),
                 Lexeme::new(Token::ColonEqual, Pos(1, 3)),
+                Lexeme::new(Token::Semicolon, Pos(1, 6)),
                 Lexeme::new(Token::Eof, Pos(1, 6)),
             ]
         );

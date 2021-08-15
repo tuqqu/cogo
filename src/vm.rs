@@ -146,6 +146,7 @@ impl Vm {
             let op_code = &codes[i];
 
             match op_code {
+                OpCode::Noop => {}
                 OpCode::PlusNoop => {
                     let a = stack.pop()?;
                     a.plus_noop()?;
