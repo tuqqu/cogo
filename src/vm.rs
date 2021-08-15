@@ -42,6 +42,12 @@ impl<T> VmStack<T> {
             .expect("Cannot retrieve value from stack.")
     }
 
+    fn last_mut(&mut self) -> &mut T {
+        self.stack
+            .last_mut()
+            .expect("Cannot retrieve mutable reference on an empty stack.")
+    }
+
     fn put_at(&mut self, i: usize, v: T) {
         self.stack[i] = v;
     }
@@ -132,7 +138,9 @@ impl Vm {
         let codes = chunk.codes();
         let last = codes.len();
         let mut i = 0;
-        let mut flag_jump = false;
+
+        let mut match_val: Option<Value> = None;
+        let mut switches: VmStack<Switch> = VmStack::new();
 
         while i < last {
             let op_code = &codes[i];
@@ -374,19 +382,73 @@ impl Vm {
                 OpCode::BackJump(j) => {
                     i -= j;
                 }
-                OpCode::BreakJump(j) => {
-                    if flag_jump {
-                        i += j;
-                        flag_jump = false;
+                OpCode::DefaultJump(j) => {
+                    let last = switches.last_mut();
+
+                    if last.matched {
+                        switches.pop()?;
+                    } else {
+                        i -= j;
+                        last.matched = true;
                     }
                 }
-                OpCode::DoBreakJump => {
-                    flag_jump = true;
+                OpCode::CaseBreakJump(j) => {
+                    let mut last = switches.last_mut();
+                    if last.jump_from_case {
+                        i += j;
+                        last.jump_from_case = false;
+                    }
+                }
+                OpCode::DoCaseBreakJump => {
+                    let mut last = switches.last_mut();
+                    last.jump_from_case = true;
+                }
+                OpCode::Fallthrough => {
+                    let mut last = switches.last_mut();
+                    last.jump_from_case = false;
+                    last.fall_flag = true;
+                }
+                OpCode::Switch => {
+                    let val = stack.pop()?;
+                    match_val = Some(val);
+                    switches.push(Switch::new());
+                }
+                OpCode::DefaultCaseJump(j) => {
+                    let mut last = switches.last_mut();
+                    if !last.fall_flag {
+                        i += j;
+                    }
+                    if last.fall_flag {
+                        last.fall_flag = false;
+                    }
+                }
+                OpCode::CaseJump(j) => {
+                    let mut last = switches.last_mut();
+
+                    if !last.fall_flag {
+                        if let Some(match_val) = &match_val {
+                            let val = stack.pop()?;
+
+                            match match_val.equal(&val)? {
+                                Value::Bool(true) => {
+                                    last.matched = true;
+                                }
+                                Value::Bool(false) => {
+                                    i += j;
+                                }
+                                _ => panic!("Unexpected matching result."),
+                            }
+                        } else {
+                            panic!("No matching value found.");
+                        }
+                    } else {
+                        last.fall_flag = false;
+                    }
                 }
                 _ => {}
             }
-            // dbg!(op_code);
-            // dbg!(&stack);
+            // eprintln!("\x1b[0;33m{:?}\x1b[0m", op_code);
+            // eprintln!("\x1b[0;32m{:?}\x1b[0m", stack);
 
             i += 1;
         }
@@ -420,3 +482,19 @@ impl From<io::Error> for VmError {
 }
 
 pub type VmResult = result::Result<(), VmError>;
+
+struct Switch {
+    matched: bool,
+    jump_from_case: bool,
+    fall_flag: bool,
+}
+
+impl Switch {
+    fn new() -> Self {
+        Self {
+            matched: false,
+            jump_from_case: false,
+            fall_flag: false,
+        }
+    }
+}

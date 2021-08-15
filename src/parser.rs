@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::chunk::{Chunk, OpCode};
 use crate::lexer::lexeme::{Lexeme, Token};
 use crate::value::{ValType, Value};
@@ -9,8 +11,7 @@ pub struct Parser<'a> {
     errs: Vec<String>,
     panic: bool,
     scope: Scope,
-    loop_context: bool,
-    control_jump: usize,
+    control_flow: ControlFlow,
 }
 
 type ParseCallback<T> = fn(&mut T, bool);
@@ -29,8 +30,7 @@ impl<'a> Parser<'a> {
             errs: Vec::new(),
             panic: false,
             scope: Scope::new(),
-            loop_context: false,
-            control_jump: 0,
+            control_flow: ControlFlow::new(),
         }
     }
 
@@ -94,9 +94,7 @@ impl<'a> Parser<'a> {
     }
 
     fn const_decl(&mut self) {
-        let name = self
-            .parse_var()
-            .to_string();
+        let name = self.parse_var().to_string();
 
         self.decl_scoped_const(name.clone());
 
@@ -127,6 +125,7 @@ impl<'a> Parser<'a> {
             Token::Dot => (None, None, Precedence::None),
             Token::Minus => (Some(Self::unary), Some(Self::binary), Precedence::Term),
             Token::Plus => (Some(Self::unary), Some(Self::binary), Precedence::Term),
+            Token::Colon => (None, None, Precedence::None),
             Token::Semicolon => (None, None, Precedence::None),
             Token::Slash => (None, Some(Self::binary), Precedence::Factor),
             Token::Modulus => (None, Some(Self::binary), Precedence::Factor),
@@ -148,6 +147,11 @@ impl<'a> Parser<'a> {
             Token::Struct => (None, None, Precedence::None),
             Token::Else => (None, None, Precedence::None),
             Token::For => (None, None, Precedence::None),
+            Token::Switch => (None, None, Precedence::None),
+            Token::Case => (None, None, Precedence::None),
+            // Token::Fallthrough => (None, None, Precedence::None),
+            // Token::Break => (None, None, Precedence::None),
+            // Token::Continue => (None, None, Precedence::None),
             Token::Func => (None, None, Precedence::None),
             Token::If => (None, None, Precedence::None),
             // Token::Nil => (Some(Self::unary), None, Precedence::None),
@@ -165,6 +169,11 @@ impl<'a> Parser<'a> {
     }
 
     fn prev(&self) -> &Lexeme {
+        if self.current == 0 {
+            // FIXME move to error
+            panic!("No tokens yet consumed.");
+        }
+
         &self.lexemes[self.current - 1]
     }
 
@@ -172,7 +181,11 @@ impl<'a> Parser<'a> {
         if self.current().token == tok {
             self.advance();
         } else {
-            self.err(format!("Expected token \"{}\", got \"{}\"", tok, self.current().token));
+            self.err(format!(
+                "Expected token \"{}\", got \"{}\"",
+                tok,
+                self.current().token
+            ));
         }
     }
 
@@ -196,11 +209,7 @@ impl<'a> Parser<'a> {
     fn err(&mut self, msg: String) {
         self.panic = true;
         //FIXME: consider passing a handler
-        eprintln!(
-            "\x1b[0;31m{} Error: {}\x1b[0m",
-            self.current().pos,
-            msg,
-        );
+        eprintln!("\x1b[0;31m{} Error: {}\x1b[0m", self.current().pos, msg,);
         self.errs.push(msg);
     }
 
@@ -229,6 +238,8 @@ impl<'a> Parser<'a> {
         // FIXME: defer/debug
         } else if self.consume_if(Token::For) {
             self.stmt_for();
+        } else if self.consume_if(Token::Switch) {
+            self.stmt_switch();
         } else if self.consume_if(Token::If) {
             self.stmt_if();
         } else if self.consume_if(Token::LeftCurlyBrace) {
@@ -249,40 +260,56 @@ impl<'a> Parser<'a> {
     }
 
     fn stmt_continue(&mut self) {
-        if !self.loop_context {
+        if !self.control_flow.is_continuable() {
             self.err("\"continue\" can be used in loops only".to_string());
             return;
         }
 
         self.add_code(OpCode::BackJump(
-            self.chunk.codes().len() - self.control_jump,
+            self.chunk.codes().len() - self.control_flow.continues(),
         ));
     }
 
     fn stmt_break(&mut self) {
-        if !self.loop_context {
-            self.err("\"break\" can be used in loops only".to_string());
+        if !self.control_flow.is_breakable() {
+            self.err("\"break\" is misplaced".to_string());
             return;
         }
 
-        self.add_code(OpCode::DoBreakJump);
-        self.add_code(OpCode::BackJump(
-            self.chunk.codes().len() - self.control_jump,
-        ));
+        // self.add_code(OpCode::DoBreakJump);
+        let jump = self.add_code(OpCode::Jump(0));
+        self.control_flow.add_break(jump);
+    }
+
+    fn stmt_fallthrough(&mut self) {
+        if !self.control_flow.is_fallthroughable() {
+            self.err("\"fallthrough\" can be used in switch statements only".to_string());
+            return;
+        }
+
+        self.add_code(OpCode::Fallthrough);
     }
 
     fn begin_scope(&mut self) {
         self.scope.depth += 1;
     }
 
+    fn begin_switch(&mut self) {
+        self.control_flow.enter_switch();
+    }
+
     fn begin_loop(&mut self) {
         self.begin_scope();
-        self.loop_context = true;
+        self.control_flow.enter_loop();
     }
 
     fn end_loop(&mut self) {
-        self.loop_context = false;
+        self.control_flow.leave_loop();
         self.end_scope();
+    }
+
+    fn end_switch(&mut self) {
+        self.control_flow.leave_switch();
     }
 
     fn end_scope(&mut self) {
@@ -412,6 +439,99 @@ impl<'a> Parser<'a> {
         self.consume(Token::Semicolon);
     }
 
+    fn stmt_switch(&mut self) {
+        self.begin_switch();
+
+        if self.check(Token::LeftCurlyBrace) {
+            // switch {}
+            self.add_code(OpCode::Bool(Value::Bool(true)));
+        } else {
+            // switch expr {}
+            self.expr();
+        }
+        self.consume(Token::LeftCurlyBrace);
+        self.add_code(OpCode::Switch);
+
+        let mut case_jump: Option<usize> = None;
+        let mut break_jumps = vec![];
+
+        let mut default_case = false;
+        let mut default_jump: Option<usize> = None;
+
+        while self.check(Token::Case) || self.check(Token::Default) {
+            // default ----
+            if self.consume_if(Token::Default) {
+                if default_case {
+                    self.err("Multiple \"defaults\" in switch.".to_string());
+                    return; //FIXME or allow the flow?
+                }
+                default_case = true;
+
+                // self.add_code(OpCode::DoDefaultCaseJump);
+                if let Some(sw_jump) = case_jump {
+                    self.tweak_jump(sw_jump);
+                }
+
+                case_jump = Some(self.add_code(OpCode::DefaultCaseJump(0)));
+                default_jump = Some(self.last_op_code_index());
+            } else {
+                self.consume(Token::Case);
+
+                if let Some(sw_jump) = case_jump {
+                    self.tweak_jump(sw_jump);
+                }
+
+                self.expr();
+                case_jump = Some(self.add_code(OpCode::CaseJump(0)));
+            }
+
+            self.case_block();
+
+            let br_jump = self.add_code(OpCode::CaseBreakJump(0));
+            break_jumps.push(br_jump);
+        }
+
+        if let Some(sw_jump) = case_jump {
+            self.tweak_jump(sw_jump);
+        }
+
+        self.consume(Token::RightCurlyBrace);
+
+        if let Some(default_jump) = default_jump {
+            self.add_code(OpCode::DefaultJump(self.chunk.codes().len() - default_jump));
+        }
+
+        break_jumps.append(self.control_flow.switch_breaks());
+        for break_jump in break_jumps {
+            self.tweak_jump(break_jump);
+        }
+
+        self.end_switch();
+    }
+
+    fn case_block(&mut self) {
+        self.begin_scope();
+
+        self.consume(Token::Colon);
+        self.add_code(OpCode::DoCaseBreakJump);
+
+        while !self.check(Token::Case)
+            && !self.check(Token::Default)
+            && !self.check(Token::RightCurlyBrace)
+            && !self.check(Token::Fallthrough)
+        {
+            self.decl();
+        }
+
+        if self.consume_if(Token::Fallthrough) {
+            self.stmt_fallthrough();
+            self.consume(Token::Semicolon); //FIXME or move it in stmt?
+        }
+        // FIXME error msg when fallthrough is not the last stmt
+
+        self.end_scope();
+    }
+
     fn stmt_for(&mut self) {
         self.begin_loop();
 
@@ -456,40 +576,42 @@ impl<'a> Parser<'a> {
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
 
-        let break_jump;
-        // fixme fix first cond && continue
         if for_like && !self.check(Token::LeftCurlyBrace) {
             let inc_jump = self.add_code(OpCode::Jump(0));
             let inc_begin = self.last_op_code_index();
 
-            break_jump = self.add_code(OpCode::BreakJump(0));
-            self.control_jump = exit_jump;
+            self.control_flow.add_continue(exit_jump);
 
             self.expr();
             self.add_code(OpCode::Pop);
 
             self.add_code(OpCode::BackJump(self.chunk.codes().len() - exit_jump));
             exit_jump = inc_begin;
-            self.control_jump = exit_jump;
+
+            self.control_flow.add_continue(exit_jump);
             self.patch_jump(inc_jump, OpCode::Jump);
         } else {
-            break_jump = self.add_code(OpCode::BreakJump(0));
-            self.control_jump = exit_jump;
+            self.control_flow.add_continue(exit_jump);
         }
 
         self.consume(Token::LeftCurlyBrace);
         self.stmt_block();
 
         let exit_jump = self.chunk.codes().len() - exit_jump;
-        self.control_jump = exit_jump;
+        self.control_flow.add_continue(exit_jump);
         self.add_code(OpCode::BackJump(exit_jump));
 
         self.patch_jump(if_jump, OpCode::IfFalseJump);
-        self.patch_jump_by(1, break_jump, OpCode::BreakJump);
 
         self.add_code(OpCode::Pop);
 
-        self.loop_context = false;
+        let mut break_jumps = Vec::new();
+        break_jumps.append(self.control_flow.loop_breaks());
+
+        for inserted_break in break_jumps {
+            self.patch_jump(inserted_break, OpCode::Jump);
+        }
+
         self.end_loop();
     }
 
@@ -672,18 +794,37 @@ impl<'a> Parser<'a> {
     }
 
     fn add_code(&mut self, code: OpCode) -> usize {
-        let pos = self.prev().pos;
+        //FIXME think of this mess
+        let pos = if self.current > 0 {
+            self.prev().pos
+        } else {
+            self.lexemes[0].pos
+        };
+
         self.chunk.write(code, pos)
     }
 
     //FIXME just pass a jump with usize inside
-    fn patch_jump(&mut self, i: usize, code: fn(usize) -> OpCode) {
-        self.patch_jump_by(0, i, code);
+    fn patch_jump(&mut self, i: usize, _: fn(usize) -> OpCode) {
+        self.tweak_jump(i);
     }
 
-    fn patch_jump_by(&mut self, by: usize, i: usize, code: fn(usize) -> OpCode) {
+    fn tweak_jump(&mut self, i: usize) {
         let jump = self.last_op_code_index() - i;
-        self.chunk.write_at(i, code(jump + by));
+
+        use OpCode::*;
+        let jump = match &self.chunk.codes()[i] {
+            Jump(_) => Jump(jump),
+            CaseJump(_) => CaseJump(jump),
+            DefaultCaseJump(_) => DefaultCaseJump(jump),
+            DefaultJump(_) => DefaultJump(jump),
+            CaseBreakJump(_) => CaseBreakJump(jump),
+            BackJump(_) => BackJump(jump),
+            IfFalseJump(_) => IfFalseJump(jump),
+            code => panic!("Cannot change non-jump opcode \"{:?}\".", code),
+        };
+
+        self.chunk.write_at(i, jump);
     }
 }
 
@@ -786,4 +927,105 @@ struct Local {
     name: String,
     mutable: bool,
     depth: isize,
+}
+
+#[derive(Debug)]
+struct ControlFlow {
+    continue_jumps: HashMap<usize, usize>,
+    loop_breaks: HashMap<usize, Vec<usize>>,
+    switch_breaks: HashMap<usize, Vec<usize>>,
+    loop_depth: usize,
+    switch_depth: usize,
+    break_stack: Vec<BreakState>,
+}
+
+#[derive(Debug)]
+enum BreakState {
+    Switch,
+    Loop,
+}
+
+impl ControlFlow {
+    fn new() -> Self {
+        Self {
+            continue_jumps: HashMap::new(),
+            loop_breaks: HashMap::new(),
+            switch_breaks: HashMap::new(),
+            loop_depth: 0,
+            switch_depth: 0,
+            break_stack: Vec::new(),
+        }
+    }
+
+    fn enter_switch(&mut self) {
+        self.switch_depth += 1;
+        self.break_stack.push(BreakState::Switch);
+    }
+
+    fn leave_switch(&mut self) {
+        self.switch_depth -= 1;
+        self.break_stack.pop();
+    }
+
+    fn enter_loop(&mut self) {
+        self.loop_depth += 1;
+        self.break_stack.push(BreakState::Loop);
+    }
+
+    fn leave_loop(&mut self) {
+        self.loop_depth -= 1;
+        self.break_stack.pop();
+    }
+
+    fn add_break(&mut self, jump: usize) {
+        match self.break_stack.last().expect("Cannot get state") {
+            BreakState::Loop => self.add_loop_break(jump),
+            BreakState::Switch => self.add_switch_break(jump),
+        }
+    }
+
+    fn add_loop_break(&mut self, jump: usize) {
+        self.loop_breaks
+            .entry(self.loop_depth)
+            .or_default()
+            .push(jump);
+    }
+
+    fn add_switch_break(&mut self, jump: usize) {
+        self.switch_breaks
+            .entry(self.switch_depth)
+            .or_default()
+            .push(jump);
+    }
+
+    fn add_continue(&mut self, jump: usize) {
+        self.continue_jumps.insert(self.loop_depth, jump);
+    }
+
+    fn loop_breaks(&mut self) -> &mut Vec<usize> {
+        self.loop_breaks.entry(self.loop_depth).or_default()
+    }
+
+    fn switch_breaks(&mut self) -> &mut Vec<usize> {
+        self.switch_breaks.entry(self.switch_depth).or_default()
+    }
+
+    fn continues(&self) -> usize {
+        *self
+            .continue_jumps
+            .get(&self.loop_depth)
+            .expect("No continue jump found")
+    }
+
+    fn is_breakable(&self) -> bool {
+        self.loop_depth != 0 || self.switch_depth != 0
+    }
+
+    fn is_continuable(&self) -> bool {
+        self.loop_depth != 0
+    }
+
+    fn is_fallthroughable(&self) -> bool {
+        self.switch_depth != 0
+    }
 }

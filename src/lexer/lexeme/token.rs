@@ -266,7 +266,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Identifier => write!(f, "identifier"),
-            _ => write!(f, "{}", self.to_string())
+            _ => write!(f, "{}", self.to_string()),
         }
     }
 }

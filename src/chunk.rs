@@ -25,11 +25,16 @@ pub enum OpCode {
     PlusNoop,
     Not,
 
+    Switch,
+    DefaultJump(usize),
+    CaseJump(usize),
+    DefaultCaseJump(usize),
     IfFalseJump(usize),
     Jump(usize),
     BackJump(usize),
-    BreakJump(usize),
-    DoBreakJump,
+    CaseBreakJump(usize),
+    DoCaseBreakJump,
+    Fallthrough,
 
     Continue,
     Return,
