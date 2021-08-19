@@ -82,12 +82,11 @@ impl<'a> Parser<'a> {
                 self.err("Type declaration expected.".to_string());
             }
 
+            self.add_code(OpCode::PutDefaultValue(val_type.clone().unwrap()));
+
             if self.is_global_scope() {
-                self.add_code(OpCode::VarGlobalNoInit(name, val_type.unwrap()));
+                self.add_code(OpCode::VarGlobal(name, val_type));
             } else {
-                if let Some(val_type) = val_type {
-                    self.add_code(OpCode::PutDefaultValue(val_type));
-                }
                 self.scope.init_last();
             }
         }

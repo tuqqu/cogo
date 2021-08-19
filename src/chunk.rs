@@ -51,7 +51,6 @@ pub enum OpCode {
     Nil,
 
     VarGlobal(String, Option<ValType>),
-    VarGlobalNoInit(String, ValType),
     ConstGlobal(String, Option<ValType>),
 
     GetGlobal(String),

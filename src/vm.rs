@@ -281,18 +281,6 @@ impl Vm {
                         .insert(name.clone(), VmNamedValue::Const(value.clone()));
                     stack.pop()?;
                 }
-                OpCode::VarGlobalNoInit(name, val_type) => {
-                    if self.globals.contains_key(name) {
-                        return Err(VmError::Compile(format!(
-                            "Name \"{}\" already declared in this block.",
-                            name
-                        ))); //FIXME: err msg
-                    }
-
-                    self.globals
-                        .insert(name.clone(), VmNamedValue::Var(Value::default(val_type)));
-                    // stack.pop()?;
-                }
                 OpCode::GetGlobal(name) => {
                     if let Some(val) = self.globals.get(name) {
                         let val = match val {
