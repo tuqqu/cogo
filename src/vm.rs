@@ -1,10 +1,12 @@
-use std::cell::{RefCell, RefMut};
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::io::Error;
 use std::rc::Rc;
 use std::{io, result};
 
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::OpCode;
+use crate::name_table::{NameError, NameTable};
+use crate::unit::{CompilationUnit as CUnit, FuncUnit};
 use crate::value::{TypeError, Value};
 
 #[derive(Debug)]
@@ -12,6 +14,7 @@ struct VmStack<T> {
     stack: Vec<T>,
 }
 
+#[derive(Debug)]
 struct StackUnderflow;
 type PopResult<T> = result::Result<T, StackUnderflow>;
 
@@ -42,6 +45,10 @@ impl<T> VmStack<T> {
             .expect("Cannot retrieve value from stack.")
     }
 
+    fn retrieve_by(&self, by: usize) -> &T {
+        self.retrieve_at(self.stack.len() - by - 1)
+    }
+
     fn last_mut(&mut self) -> &mut T {
         self.stack
             .last_mut()
@@ -50,6 +57,10 @@ impl<T> VmStack<T> {
 
     fn put_at(&mut self, i: usize, v: T) {
         self.stack[i] = v;
+    }
+
+    fn len(&self) -> usize {
+        self.stack.len()
     }
 }
 
@@ -120,125 +131,177 @@ enum VmNamedValue {
     Const(Value),
 }
 
+type VmRuntimeCall = std::result::Result<(), VmError>;
+
 pub struct Vm {
     globals: HashMap<String, VmNamedValue>,
+    names: NameTable<FuncUnit>,
     std_streams: Box<dyn StreamProvider>,
+    stack: VmStack<Value>,
+    frames: VmStack<Rc<RefCell<CUnitFrame>>>,
+    current_frame: usize,
 }
 
 impl Vm {
-    pub fn new(std_streams: Option<Box<dyn StreamProvider>>) -> Self {
+    pub fn new(std_streams: Option<Box<dyn StreamProvider>>, entry_frame: CUnitFrame) -> Self {
+        let mut frames = VmStack::new();
+        frames.push(Rc::new(RefCell::new(entry_frame)));
+
         Self {
             globals: HashMap::new(),
+            names: NameTable::new(),
+            stack: VmStack::new(),
+            frames,
+            current_frame: 0,
             std_streams: std_streams.unwrap_or_else(|| Box::new(StdStreamProvider::new(None))),
         }
     }
 
-    pub fn run(&mut self, chunk: &Chunk) -> VmResult {
-        let mut stack = VmStack::<Value>::new();
-        let codes = chunk.codes();
-        let last = codes.len();
-        let mut i = 0;
+    pub fn current_frame(&self) -> Ref<CUnitFrame> {
+        let last_frame = self.frames.retrieve_at(self.current_frame);
+        last_frame.borrow()
+    }
 
+    pub fn current_frame_mut(&mut self) -> RefMut<CUnitFrame> {
+        let last_frame = self.frames.retrieve_at(self.current_frame);
+        last_frame.borrow_mut()
+    }
+
+    pub fn run(&mut self) -> VmResult {
         let mut match_val: Option<Value> = None;
         let mut switches: VmStack<Switch> = VmStack::new();
 
-        while i < last {
-            let op_code = &codes[i];
+        loop {
+            let op_code = self.current_frame().next().clone();
+            let op_code = if let Some(op_code) = op_code {
+                op_code
+            } else if self.current_frame == 0 {
+                break;
+            } else {
+                self.current_frame -= 1;
+                self.frames.pop()?;
+                continue;
+            };
+            // eprintln!("\x1b[0;35m{:?}\x1b[0m", op_code);
 
             match op_code {
                 OpCode::Noop => {}
                 OpCode::PlusNoop => {
-                    let a = stack.pop()?;
+                    let a = self.stack.pop()?;
                     a.plus_noop()?;
-                    stack.push(a);
+                    self.stack.push(a);
                 }
                 OpCode::Negate => {
-                    let a = stack.pop()?;
-                    stack.push(a.negate()?);
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.negate()?);
                 }
                 OpCode::Subtract => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.sub(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.sub(&b)?);
                 }
                 OpCode::Add => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.add(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.add(&b)?);
                 }
                 OpCode::Multiply => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.mult(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.mult(&b)?);
                 }
                 OpCode::Divide => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.div(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.div(&b)?);
                 }
                 OpCode::Remainder => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.modulo(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.modulo(&b)?);
                 }
-                OpCode::Return => {
-                    // FIXME
-                    // dbg!(val);
+                OpCode::Return(void) => {
+                    let val = if !void { Some(self.stack.pop()?) } else { None };
+
+                    if !self.return_conforms(&val) {
+                        panic!("error in return type");
+                    }
+
+                    self.discard_frame_stack()?;
+                    self.current_frame -= 1;
+                    self.frames.pop()?;
+
+                    if !void {
+                        self.stack.push(val.unwrap());
+                    }
+
+                    continue;
+                }
+                OpCode::Exit => {
                     return Ok(());
                 }
                 OpCode::Bool(v) | OpCode::Int(v) | OpCode::Float(v) | OpCode::String(v) => {
-                    stack.push(v.clone()); //FIXME clone
+                    self.stack.push(v.clone()); //FIXME clone
                 }
                 // FIXME literals
                 OpCode::IntLiteral(v) | OpCode::FloatLiteral(v) => {
-                    stack.push(v.clone()); //FIXME clone
+                    self.stack.push(v.clone()); //FIXME clone
+                }
+                OpCode::Func(funit) => {
+                    if let CUnit::Function(func) = funit {
+                        self.names.insert(func.name.clone(), func.clone())?;
+                        self.stack.push(Value::Func(func.name.clone())); //FIXME clone
+                    } else {
+                        panic!("func expected");
+                    }
                 }
                 OpCode::Not => {
-                    let a = stack.pop()?;
-                    stack.push(a.not()?);
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.not()?);
                 }
                 OpCode::Equal => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.equal(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.equal(&b)?);
                 }
                 OpCode::NotEqual => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.equal(&b)?.not()?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.equal(&b)?.not()?);
                 }
                 OpCode::Greater => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.greater(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.greater(&b)?);
                 }
                 OpCode::GreaterEqual => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.greater_equal(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.greater_equal(&b)?);
                 }
                 OpCode::Less => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.less(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.less(&b)?);
                 }
                 OpCode::LessEqual => {
-                    let b = stack.pop()?;
-                    let a = stack.pop()?;
-                    stack.push(a.less_equal(&b)?);
+                    let b = self.stack.pop()?;
+                    let a = self.stack.pop()?;
+                    self.stack.push(a.less_equal(&b)?);
                 }
                 OpCode::Pop => {
-                    stack.pop()?;
+                    self.stack.pop()?;
                 }
                 // FIXME remove defer/debug
                 OpCode::Defer => {
-                    let val = stack.pop()?;
+                    let val = self.stack.pop()?;
                     writeln!(self.std_streams.stream_out(), "{:?}", val)?;
                 }
                 OpCode::VarGlobal(name, val_type) => {
-                    let value = stack.retrieve();
+                    let value = self.stack.retrieve(); //FIXME improve message when void function result is used
+
                     if let Some(val_type) = val_type {
-                        if !value.is_of_type(val_type) {
+                        if !value.is_of_type(&val_type) {
                             return Err(VmError::Compile(format!(
                                 "Got value of type \"{}\" but expected type \"{}\".",
                                 value.get_type().name(),
@@ -247,7 +310,7 @@ impl Vm {
                         }
                     }
 
-                    if self.globals.contains_key(name) {
+                    if self.globals.contains_key(&name) {
                         return Err(VmError::Compile(format!(
                             "Name \"{}\" already declared in this block.",
                             name
@@ -256,12 +319,12 @@ impl Vm {
 
                     self.globals
                         .insert(name.clone(), VmNamedValue::Var(value.clone()));
-                    stack.pop()?;
+                    self.stack.pop()?;
                 }
                 OpCode::ConstGlobal(name, val_type) => {
-                    let value = stack.retrieve();
+                    let value = self.stack.retrieve();
                     if let Some(val_type) = val_type {
-                        if !value.is_of_type(val_type) {
+                        if !value.is_of_type(&val_type) {
                             return Err(VmError::Compile(format!(
                                 "Got value of type \"{}\" but expected type \"{}\".",
                                 value.get_type().name(),
@@ -270,7 +333,7 @@ impl Vm {
                         }
                     }
 
-                    if self.globals.contains_key(name) {
+                    if self.globals.contains_key(&name) {
                         return Err(VmError::Compile(format!(
                             "Name \"{}\" already declared in this block.",
                             name
@@ -279,29 +342,29 @@ impl Vm {
 
                     self.globals
                         .insert(name.clone(), VmNamedValue::Const(value.clone()));
-                    stack.pop()?;
+                    self.stack.pop()?;
                 }
                 OpCode::GetGlobal(name) => {
-                    if let Some(val) = self.globals.get(name) {
+                    if let Some(val) = self.globals.get(&name) {
                         let val = match val {
                             VmNamedValue::Var(val) => val,
                             VmNamedValue::Const(val) => val,
                         };
-                        stack.push(val.clone());
+                        self.stack.push(val.clone());
                     } else {
                         return Err(VmError::Compile(format!("Undefined \"{}\".", name)));
                         //FIXME: err msg
                     }
                 }
                 OpCode::SetGlobal(name) => {
-                    if !self.globals.contains_key(name) {
+                    if !self.globals.contains_key(&name) {
                         return Err(VmError::Compile(format!(
                             "Name \"{}\" is not previously defined.",
                             name
                         ))); //FIXME: err msg
                     }
 
-                    let value = stack.retrieve();
+                    let value = self.stack.retrieve();
                     let old_v = self
                         .globals
                         .insert(name.clone(), VmNamedValue::Var(value.clone()))
@@ -330,16 +393,46 @@ impl Vm {
                     // no pop?
                 }
                 OpCode::GetLocal(i) => {
-                    let value = stack.retrieve_at(*i).clone();
-                    stack.push(value);
+                    let offset = self.current_frame().stack_pos;
+                    let value = self.stack.retrieve_at(i + offset).clone();
+                    self.stack.push(value);
                 }
                 OpCode::SetLocal(i) => {
-                    let value = stack.retrieve().clone();
-                    stack.put_at(*i, value);
+                    let offset = self.current_frame().stack_pos;
+                    let old_v = self.stack.retrieve_at(i + offset).clone();
+                    let value = self.stack.retrieve().clone();
+
+                    if !old_v.same_type(&value) {
+                        return Err(VmError::Compile(format!(
+                            "Wrong type \"{}\", expected \"{}\".",
+                            value.get_type().name(),
+                            old_v.get_type().name()
+                        ))); //FIXME: err msg
+                    }
+
+                    self.stack.put_at(i + offset, value);
+                }
+                OpCode::Call(argc) => {
+                    let val = self.stack.retrieve_by(argc as usize).clone();
+                    self.call(&val, argc)?;
+
+                    self.current_frame_mut().inc_pointer(1);
+                    self.current_frame += 1;
+                    continue;
                 }
                 OpCode::ValidateType(val_type) => {
-                    let val = stack.retrieve();
-                    if !val.is_of_type(val_type) {
+                    let val = self.stack.retrieve();
+                    if !val.is_of_type(&val_type) {
+                        return Err(VmError::Compile(format!(
+                            "Wrong type \"{}\", expected \"{}\".",
+                            val.get_type().name(),
+                            val_type.name()
+                        ))); //FIXME: err msg
+                    }
+                }
+                OpCode::ValidateTypeAt(val_type, at) => {
+                    let val = self.stack.retrieve_by(at);
+                    if !val.is_of_type(&val_type) {
                         return Err(VmError::Compile(format!(
                             "Wrong type \"{}\", expected \"{}\".",
                             val.get_type().name(),
@@ -348,13 +441,13 @@ impl Vm {
                     }
                 }
                 OpCode::PutDefaultValue(val_type) => {
-                    stack.push(Value::default(val_type));
+                    self.stack.push(Value::default(&val_type));
                 }
                 OpCode::IfFalseJump(j) => {
-                    let value = stack.retrieve();
+                    let value = self.stack.retrieve();
                     match value {
                         Value::Bool(false) => {
-                            i += j;
+                            self.current_frame_mut().inc_pointer(j);
                         }
                         Value::Bool(true) => {}
                         val => {
@@ -366,10 +459,10 @@ impl Vm {
                     }
                 }
                 OpCode::Jump(j) => {
-                    i += j;
+                    self.current_frame_mut().inc_pointer(j);
                 }
                 OpCode::BackJump(j) => {
-                    i -= j;
+                    self.current_frame_mut().dec_pointer(j);
                 }
                 OpCode::DefaultJump(j) => {
                     let last = switches.last_mut();
@@ -377,14 +470,14 @@ impl Vm {
                     if last.matched {
                         switches.pop()?;
                     } else {
-                        i -= j;
+                        self.current_frame_mut().dec_pointer(j);
                         last.matched = true;
                     }
                 }
                 OpCode::CaseBreakJump(j) => {
                     let mut last = switches.last_mut();
                     if last.jump_from_case {
-                        i += j;
+                        self.current_frame_mut().inc_pointer(j);
                         last.jump_from_case = false;
                     }
                 }
@@ -398,14 +491,14 @@ impl Vm {
                     last.fall_flag = true;
                 }
                 OpCode::Switch => {
-                    let val = stack.pop()?;
+                    let val = self.stack.pop()?;
                     match_val = Some(val);
                     switches.push(Switch::new());
                 }
                 OpCode::DefaultCaseJump(j) => {
                     let mut last = switches.last_mut();
                     if !last.fall_flag {
-                        i += j;
+                        self.current_frame_mut().inc_pointer(j);
                     }
                     if last.fall_flag {
                         last.fall_flag = false;
@@ -416,14 +509,14 @@ impl Vm {
 
                     if !last.fall_flag {
                         if let Some(match_val) = &match_val {
-                            let val = stack.pop()?;
+                            let val = self.stack.pop()?;
 
                             match match_val.equal(&val)? {
                                 Value::Bool(true) => {
                                     last.matched = true;
                                 }
                                 Value::Bool(false) => {
-                                    i += j;
+                                    self.current_frame_mut().inc_pointer(j);
                                 }
                                 _ => panic!("Unexpected matching result."),
                             }
@@ -436,13 +529,61 @@ impl Vm {
                 }
                 _ => {}
             }
-            // eprintln!("\x1b[0;33m{:?}\x1b[0m", op_code);
-            // eprintln!("\x1b[0;32m{:?}\x1b[0m", stack);
 
-            i += 1;
+            // eprintln!("\x1b[0;32m{:?}\x1b[0m", self.stack);
+            // eprintln!("\x1b[0;37m{:?}\x1b[0m", self.names);
+
+            self.current_frame_mut().inc_pointer(1);
         }
 
         VmResult::Ok(())
+    }
+
+    fn call(&mut self, val: &Value, argc: u8) -> VmRuntimeCall {
+        match val {
+            Value::Func(name) => {
+                let f = self.names.get(name)?;
+
+                if argc as usize != f.params.len() {
+                    return Err(VmError::Runtime(format!(
+                        "Expected {} params, got {}",
+                        f.params.len(),
+                        argc
+                    ))); //FIXME display
+                }
+
+                let mut frame = CUnitFrame::new(CUnit::Function(f.clone()));
+                frame.stack_pos = self.stack.len() - argc as usize;
+                self.frames.push(Rc::new(RefCell::new(frame)));
+
+                Ok(())
+            }
+            _ => Err(VmError::Runtime(format!(
+                "Trying to call a non-callable value {:?}",
+                val
+            ))), //FIXME display
+        }
+    }
+
+    fn discard_frame_stack(&mut self) -> VmResult {
+        if self.stack.len() != 0 {
+            while self.stack.len() >= self.current_frame().stack_pos {
+                self.stack.pop()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn return_conforms(&self, val: &Option<Value>) -> bool {
+        match &self.current_frame().cunit {
+            CUnit::Function(funit) => match (&funit.ret_type, val) {
+                (Some(v_type), Some(val)) => val.is_of_type(v_type),
+                (None, None) => true,
+                _ => false,
+            },
+            _ => panic!("Wrong cunit type"),
+        }
     }
 }
 
@@ -470,6 +611,12 @@ impl From<io::Error> for VmError {
     }
 }
 
+impl From<NameError> for VmError {
+    fn from(e: NameError) -> Self {
+        Self::Runtime(e.0)
+    }
+}
+
 pub type VmResult = result::Result<(), VmError>;
 
 struct Switch {
@@ -484,6 +631,39 @@ impl Switch {
             matched: false,
             jump_from_case: false,
             fall_flag: false,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CUnitFrame {
+    cunit: CUnit,
+    pointer: usize,
+    stack_pos: usize,
+}
+
+impl CUnitFrame {
+    pub fn new(cunit: CUnit) -> Self {
+        Self {
+            cunit,
+            pointer: 0,
+            stack_pos: 0,
+        }
+    }
+
+    pub fn inc_pointer(&mut self, by: usize) {
+        self.pointer += by;
+    }
+
+    pub fn dec_pointer(&mut self, by: usize) {
+        self.pointer -= by;
+    }
+
+    pub fn next(&self) -> Option<OpCode> {
+        if self.pointer >= self.cunit.chunk().codes().len() {
+            None
+        } else {
+            Some(self.cunit.chunk().codes()[self.pointer].clone())
         }
     }
 }

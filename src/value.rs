@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::mem::discriminant;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,6 +26,7 @@ pub enum Value {
     Complex128(f64, f64),
 
     String(String),
+    Func(String),
 }
 
 pub struct TypeError(pub String); //FIXME: add proper error struct
@@ -50,7 +52,7 @@ impl Value {
             ValType::Complex64 => Self::Complex64(0_f32, 0_f32),
             ValType::Complex128 => Self::Complex128(0_f64, 0_f64),
             ValType::String => Self::String(String::from("")),
-            _ => panic!("44"), //FIXME: change to separate errors
+            _ => panic!("unknown valtye"), //FIXME: change to separate errors
         }
     }
 
@@ -447,6 +449,11 @@ impl Value {
             Self::Complex64(..) => ValType::Complex64,
             Self::Complex128(..) => ValType::Complex128,
             Self::String(_) => ValType::String,
+            // Self::Func(f) => ValType::Func(), FIXME impl here a transformation of f -> ftype
+            t => {
+                dbg!(t);
+                panic!("Unknown type")
+            }
         }
     }
 
@@ -478,10 +485,12 @@ pub enum ValType {
     Complex64,
     Complex128,
     String,
+    Func(FuncType),
     Struct(String),
 }
 
 impl ValType {
+    // primitives
     const TYPE_BOOL: &'static str = "bool";
     const TYPE_INT8: &'static str = "int8";
     const TYPE_INT16: &'static str = "int16";
@@ -499,27 +508,70 @@ impl ValType {
     const TYPE_COMPLEX64: &'static str = "complex64";
     const TYPE_COMPLEX128: &'static str = "complex128";
     const TYPE_STRING: &'static str = "string";
+    // complex types
+    const TYPE_FUNC: &'static str = "func";
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> String {
         match self {
-            Self::Bool => Self::TYPE_BOOL,
-            Self::Int8 => Self::TYPE_INT8,
-            Self::Int16 => Self::TYPE_INT16,
-            Self::Int32 => Self::TYPE_INT32,
-            Self::Int64 => Self::TYPE_INT64,
-            Self::Int => Self::TYPE_INT,
-            Self::Uint8 => Self::TYPE_UINT8,
-            Self::Uint16 => Self::TYPE_UINT16,
-            Self::Uint32 => Self::TYPE_UINT32,
-            Self::Uint64 => Self::TYPE_UINT64,
-            Self::Uint => Self::TYPE_UINT,
-            Self::Uintptr => Self::TYPE_UINTPTR,
-            Self::Float32 => Self::TYPE_FLOAT32,
-            Self::Float64 => Self::TYPE_FLOAT64,
-            Self::Complex64 => Self::TYPE_COMPLEX64,
-            Self::Complex128 => Self::TYPE_COMPLEX128,
-            Self::String => Self::TYPE_STRING,
-            Self::Struct(name) => name,
+            Self::Bool => str::to_string(Self::TYPE_BOOL),
+            Self::Int8 => str::to_string(Self::TYPE_INT8),
+            Self::Int16 => str::to_string(Self::TYPE_INT16),
+            Self::Int32 => str::to_string(Self::TYPE_INT32),
+            Self::Int64 => str::to_string(Self::TYPE_INT64),
+            Self::Int => str::to_string(Self::TYPE_INT),
+            Self::Uint8 => str::to_string(Self::TYPE_UINT8),
+            Self::Uint16 => str::to_string(Self::TYPE_UINT16),
+            Self::Uint32 => str::to_string(Self::TYPE_UINT32),
+            Self::Uint64 => str::to_string(Self::TYPE_UINT64),
+            Self::Uint => str::to_string(Self::TYPE_UINT),
+            Self::Uintptr => str::to_string(Self::TYPE_UINTPTR),
+            Self::Float32 => str::to_string(Self::TYPE_FLOAT32),
+            Self::Float64 => str::to_string(Self::TYPE_FLOAT64),
+            Self::Complex64 => str::to_string(Self::TYPE_COMPLEX64),
+            Self::Complex128 => str::to_string(Self::TYPE_COMPLEX128),
+            Self::String => str::to_string(Self::TYPE_STRING),
+            Self::Func(f_type) => f_type.name(),
+            Self::Struct(name) => str::to_string(name),
         }
+    }
+}
+
+impl Display for ValType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncType {
+    args: Vec<ValType>, //FIXME consider a slice here
+    ret: Box<ValType>,
+}
+
+impl FuncType {
+    pub fn new(args: Vec<ValType>, ret: ValType) -> Self {
+        Self {
+            args,
+            ret: Box::new(ret),
+        }
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "{}({}) {}",
+            ValType::TYPE_FUNC,
+            self.args
+                .iter()
+                .map(|vt| vt.to_string())
+                .collect::<Vec<String>>()
+                .join(", "),
+            self.ret.name()
+        )
+    }
+}
+
+impl PartialEq for FuncType {
+    fn eq(&self, other: &Self) -> bool {
+        self.args == other.args && self.ret == other.ret
     }
 }

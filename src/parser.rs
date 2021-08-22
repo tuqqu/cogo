@@ -1,13 +1,15 @@
 use std::collections::HashMap;
+use std::mem;
 
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::OpCode;
 use crate::lexer::lexeme::{Lexeme, Token};
+use crate::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit, Param};
 use crate::value::{ValType, Value};
 
 pub struct Parser<'a> {
     lexemes: &'a [Lexeme],
     current: usize,
-    chunk: Chunk,
+    cunit: CUnit,
     errs: Vec<String>,
     panic: bool,
     scope: Scope,
@@ -26,7 +28,7 @@ impl<'a> Parser<'a> {
         Self {
             lexemes,
             current: 0,
-            chunk: Chunk::new(),
+            cunit: CUnit::Package(PackageUnit::new()),
             errs: Vec::new(),
             panic: false,
             scope: Scope::new(),
@@ -34,22 +36,25 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Chunk {
+    pub fn parse(&mut self) -> CUnit {
         self.add_code(OpCode::Noop);
 
         while !self.consume_if(Token::Eof) {
             self.decl();
         }
 
-        self.chunk.clone()
+        self.cunit.clone()
     }
 
     fn decl(&mut self) {
         if self.consume_if(Token::Var) {
-            self.var_decl();
+            self.decl_var();
         } else if self.consume_if(Token::Const) {
-            self.const_decl();
+            self.decl_const();
+        } else if self.consume_if(Token::Func) {
+            self.decl_func();
         } else {
+            //FIXME err when in funit
             self.stmt();
         }
 
@@ -58,50 +63,51 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn var_decl(&mut self) {
+    fn decl_var(&mut self) {
         let name = self.parse_var().to_string();
 
         self.decl_scoped_var(name.clone());
 
-        let val_type = self.parse_type();
+        // FIXME change to just parse type and remake logic, same in const
+        let val_type = self.parse_type_optionally(Token::Equal);
 
         if self.consume_if(Token::Equal) {
             self.expr();
 
-            if self.is_global_scope() {
-                self.add_code(OpCode::VarGlobal(name, val_type));
-            } else {
-                if let Some(val_type) = val_type {
-                    self.add_code(OpCode::ValidateType(val_type));
-                }
-
-                self.scope.init_last();
-            }
+            self.def_var(name, val_type, true);
         } else {
             if val_type.is_none() {
                 self.err("Type declaration expected.".to_string());
             }
 
             self.add_code(OpCode::PutDefaultValue(val_type.clone().unwrap()));
-
-            if self.is_global_scope() {
-                self.add_code(OpCode::VarGlobal(name, val_type));
-            } else {
-                self.scope.init_last();
-            }
+            self.def_var(name, val_type, false);
         }
 
         self.consume(Token::Semicolon);
     }
 
-    fn const_decl(&mut self) {
+    fn def_var(&mut self, name: String, val_type: Option<ValType>, validate: bool) {
+        if self.is_global_scope() {
+            self.add_code(OpCode::VarGlobal(name, val_type));
+        } else {
+            if validate {
+                if let Some(val_type) = val_type {
+                    self.add_code(OpCode::ValidateType(val_type));
+                }
+            }
+            self.scope.init_last();
+        }
+    }
+
+    fn decl_const(&mut self) {
         let name = self.parse_var().to_string();
 
         self.decl_scoped_const(name.clone());
 
-        let val_type = self.parse_type();
+        let val_type = self.parse_type_optionally(Token::Equal);
         self.consume(Token::Equal);
-        self.const_expr();
+        self.expr_const();
 
         if self.is_global_scope() {
             self.add_code(OpCode::ConstGlobal(name, val_type));
@@ -116,9 +122,74 @@ impl<'a> Parser<'a> {
         self.consume(Token::Semicolon);
     }
 
+    fn decl_func(&mut self) {
+        let name = self.parse_var().to_string();
+        // FIXME we need this to be solved for inner nested functions
+        // self.decl_scoped_var(name.clone());
+        self.scope.init_last();
+
+        self.func(Some(name.clone()));
+        self.def_var(name, None, false);
+    }
+
+    fn func(&mut self, name: Option<String>) {
+        let cunit = CUnit::Function(FuncUnit::new(name));
+        let cunit = mem::replace(&mut self.cunit, cunit);
+
+        self.begin_scope();
+        self.consume(Token::LeftParen);
+
+        let mut params = Vec::<Param>::new();
+        if !self.check(Token::RightParen) {
+            loop {
+                if params.len() > FuncUnit::MAX_ARGC as usize {
+                    self.err("Maximum parameter count reached.".to_string());
+                }
+
+                // FIXME add anon parameter support
+                let param_name = String::from(self.parse_var());
+                let param_type = self.parse_type();
+                params.push(Param::new(param_name.clone(), param_type.clone()));
+
+                // FIXME those two methods ought to be together, maybe group them?
+                self.decl_scoped_var(param_name.clone());
+                self.def_var(param_name, Some(param_type), false);
+
+                if !self.consume_if(Token::Comma) {
+                    break;
+                }
+            }
+        }
+
+        //FIXME rethink param type validation
+        let len = params.len();
+        if len >= 1 {
+            for (i, param) in params.iter().enumerate() {
+                self.add_code(OpCode::ValidateTypeAt(param.v_type().clone(), len - i - 1));
+            }
+        }
+
+        self.consume(Token::RightParen);
+        let ret_type = self.parse_type_optionally(Token::LeftCurlyBrace);
+
+        self.consume(Token::LeftCurlyBrace);
+        self.block_body();
+        self.end_scope();
+
+        let mut cunit = mem::replace(&mut self.cunit, cunit);
+        if let CUnit::Function(funit) = &mut cunit {
+            funit.params = params;
+            funit.ret_type = ret_type;
+        } else {
+            panic!("Compilation unit must be of function type");
+        }
+
+        self.add_code(OpCode::Func(cunit));
+    }
+
     fn rule(&self, t: &Token) -> ParseRule<Self> {
         match t {
-            Token::LeftParen => (Some(Self::group), None, Precedence::None),
+            Token::LeftParen => (Some(Self::group), Some(Self::call), Precedence::Call),
             Token::RightParen => (None, None, Precedence::None),
             Token::LeftCurlyBrace => (None, None, Precedence::None),
             Token::RightCurlyBrace => (None, None, Precedence::None),
@@ -150,17 +221,14 @@ impl<'a> Parser<'a> {
             Token::For => (None, None, Precedence::None),
             Token::Switch => (None, None, Precedence::None),
             Token::Case => (None, None, Precedence::None),
-            // Token::Fallthrough => (None, None, Precedence::None),
-            // Token::Break => (None, None, Precedence::None),
-            // Token::Continue => (None, None, Precedence::None),
             Token::Func => (None, None, Precedence::None),
             Token::If => (None, None, Precedence::None),
-            // Token::Nil => (Some(Self::unary), None, Precedence::None),
             Token::False => (Some(Self::literal), None, Precedence::None),
             Token::True => (Some(Self::literal), None, Precedence::None),
             Token::Var => (None, None, Precedence::None),
             Token::Const => (None, None, Precedence::None),
             Token::Eof => (None, None, Precedence::None),
+            // FIXME move to error
             tok => panic!("Unknown token {}", tok),
         }
     }
@@ -249,14 +317,16 @@ impl<'a> Parser<'a> {
             self.stmt_continue();
         } else if self.consume_if(Token::Break) {
             self.stmt_break();
+        } else if self.consume_if(Token::Return) {
+            self.stmt_return();
         } else {
-            self.expr_stmt();
+            self.stmt_expr();
         }
     }
 
     fn stmt_block(&mut self) {
         self.begin_scope();
-        self.block();
+        self.block_body();
         self.end_scope();
     }
 
@@ -267,7 +337,7 @@ impl<'a> Parser<'a> {
         }
 
         self.add_code(OpCode::BackJump(
-            self.chunk.codes().len() - self.control_flow.continues(),
+            self.code_len() - self.control_flow.continue_jump(),
         ));
     }
 
@@ -277,7 +347,6 @@ impl<'a> Parser<'a> {
             return;
         }
 
-        // self.add_code(OpCode::DoBreakJump);
         let jump = self.add_code(OpCode::Jump(0));
         self.control_flow.add_break(jump);
     }
@@ -289,6 +358,17 @@ impl<'a> Parser<'a> {
         }
 
         self.add_code(OpCode::Fallthrough);
+    }
+
+    fn stmt_return(&mut self) {
+        //FIXME add package checking type
+        if self.consume_if(Token::Semicolon) {
+            self.add_code(OpCode::Return(true));
+        } else {
+            self.expr();
+            self.consume(Token::Semicolon);
+            self.add_code(OpCode::Return(false));
+        }
     }
 
     fn begin_scope(&mut self) {
@@ -335,7 +415,7 @@ impl<'a> Parser<'a> {
         self.scope.depth == 0
     }
 
-    fn block(&mut self) {
+    fn block_body(&mut self) {
         while !self.check(Token::RightCurlyBrace) && !self.check(Token::Eof) {
             self.decl();
         }
@@ -343,7 +423,7 @@ impl<'a> Parser<'a> {
         self.consume(Token::RightCurlyBrace);
     }
 
-    fn expr_stmt(&mut self) {
+    fn stmt_expr(&mut self) {
         if !self.check(Token::Semicolon) {
             self.expr();
             self.consume(Token::Semicolon);
@@ -354,7 +434,7 @@ impl<'a> Parser<'a> {
     }
 
     fn last_op_code_index(&self) -> usize {
-        let len = self.chunk.codes().len();
+        let len = self.code_len();
         if len == 0 {
             panic!("No opcodes to get the last index of.")
         }
@@ -367,7 +447,7 @@ impl<'a> Parser<'a> {
     }
 
     // FIXME: make parse only const expressions
-    fn const_expr(&mut self) {
+    fn expr_const(&mut self) {
         self.parse_precedence(Precedence::Assignment)
     }
 
@@ -376,6 +456,7 @@ impl<'a> Parser<'a> {
         &self.prev().literal
     }
 
+    //FIXME change name from var to name
     fn decl_scoped_var(&mut self, name: String) {
         if self.is_global_scope() {
             return;
@@ -400,7 +481,15 @@ impl<'a> Parser<'a> {
         self.scope.add_const(name);
     }
 
-    fn parse_type(&mut self) -> Option<ValType> {
+    fn parse_type_optionally(&mut self, if_not: Token) -> Option<ValType> {
+        if !self.check(if_not) {
+            Some(self.parse_type())
+        } else {
+            None
+        }
+    }
+
+    fn parse_type(&mut self) -> ValType {
         let current = self.current();
         let val_type = match current.token {
             Token::Bool => ValType::Bool,
@@ -428,12 +517,12 @@ impl<'a> Parser<'a> {
 
             Token::String => ValType::String,
             Token::Identifier => ValType::Struct(current.literal.clone()),
-            _ => return None,
+            tok => panic!("Type expected, got {}.", tok),
         };
 
         self.advance();
 
-        Some(val_type)
+        val_type
     }
 
     fn stmt_empty(&mut self) {
@@ -460,28 +549,20 @@ impl<'a> Parser<'a> {
         let mut default_jump: Option<usize> = None;
 
         while self.check(Token::Case) || self.check(Token::Default) {
+            if let Some(sw_jump) = case_jump {
+                self.finish_jump(sw_jump);
+            }
+
             // default ----
             if self.consume_if(Token::Default) {
                 if default_case {
                     self.err("Multiple \"defaults\" in switch.".to_string());
-                    return; //FIXME or allow the flow?
                 }
                 default_case = true;
-
-                // self.add_code(OpCode::DoDefaultCaseJump);
-                if let Some(sw_jump) = case_jump {
-                    self.tweak_jump(sw_jump);
-                }
-
                 case_jump = Some(self.add_code(OpCode::DefaultCaseJump(0)));
                 default_jump = Some(self.last_op_code_index());
             } else {
                 self.consume(Token::Case);
-
-                if let Some(sw_jump) = case_jump {
-                    self.tweak_jump(sw_jump);
-                }
-
                 self.expr();
                 case_jump = Some(self.add_code(OpCode::CaseJump(0)));
             }
@@ -493,18 +574,18 @@ impl<'a> Parser<'a> {
         }
 
         if let Some(sw_jump) = case_jump {
-            self.tweak_jump(sw_jump);
+            self.finish_jump(sw_jump);
         }
 
         self.consume(Token::RightCurlyBrace);
 
         if let Some(default_jump) = default_jump {
-            self.add_code(OpCode::DefaultJump(self.chunk.codes().len() - default_jump));
+            self.add_code(OpCode::DefaultJump(self.code_len() - default_jump));
         }
 
         break_jumps.append(self.control_flow.switch_breaks());
         for break_jump in break_jumps {
-            self.tweak_jump(break_jump);
+            self.finish_jump(break_jump);
         }
 
         self.end_switch();
@@ -528,7 +609,7 @@ impl<'a> Parser<'a> {
             self.stmt_fallthrough();
             self.consume(Token::Semicolon); //FIXME or move it in stmt?
         }
-        // FIXME error msg when fallthrough is not the last stmt
+        // FIXME change error msg when fallthrough is not the last stmt
 
         self.end_scope();
     }
@@ -586,11 +667,11 @@ impl<'a> Parser<'a> {
             self.expr();
             self.add_code(OpCode::Pop);
 
-            self.add_code(OpCode::BackJump(self.chunk.codes().len() - exit_jump));
+            self.add_code(OpCode::BackJump(self.code_len() - exit_jump));
             exit_jump = inc_begin;
 
             self.control_flow.add_continue(exit_jump);
-            self.patch_jump(inc_jump, OpCode::Jump);
+            self.finish_jump(inc_jump);
         } else {
             self.control_flow.add_continue(exit_jump);
         }
@@ -598,11 +679,11 @@ impl<'a> Parser<'a> {
         self.consume(Token::LeftCurlyBrace);
         self.stmt_block();
 
-        let exit_jump = self.chunk.codes().len() - exit_jump;
+        let exit_jump = self.code_len() - exit_jump;
         self.control_flow.add_continue(exit_jump);
         self.add_code(OpCode::BackJump(exit_jump));
 
-        self.patch_jump(if_jump, OpCode::IfFalseJump);
+        self.finish_jump(if_jump);
 
         self.add_code(OpCode::Pop);
 
@@ -610,7 +691,7 @@ impl<'a> Parser<'a> {
         break_jumps.append(self.control_flow.loop_breaks());
 
         for inserted_break in break_jumps {
-            self.patch_jump(inserted_break, OpCode::Jump);
+            self.finish_jump(inserted_break);
         }
 
         self.end_loop();
@@ -625,7 +706,7 @@ impl<'a> Parser<'a> {
         self.stmt_block();
 
         let jump = self.add_code(OpCode::Jump(0));
-        self.patch_jump(if_jump, OpCode::IfFalseJump);
+        self.finish_jump(if_jump);
 
         self.add_code(OpCode::Pop);
         if self.consume_if(Token::Else) {
@@ -637,25 +718,25 @@ impl<'a> Parser<'a> {
             }
         }
 
-        self.patch_jump(jump, OpCode::Jump);
+        self.finish_jump(jump);
     }
 
     fn and(&mut self, _: bool) {
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
         self.parse_precedence(Precedence::And);
-        self.patch_jump(if_jump, OpCode::IfFalseJump);
+        self.finish_jump(if_jump);
     }
 
     fn or(&mut self, _: bool) {
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         let jump = self.add_code(OpCode::Jump(0));
 
-        self.patch_jump(if_jump, OpCode::IfFalseJump);
+        self.finish_jump(if_jump);
         self.add_code(OpCode::Pop);
 
         self.parse_precedence(Precedence::Or);
-        self.patch_jump(jump, OpCode::Jump);
+        self.finish_jump(jump);
     }
 
     fn string(&mut self, _: bool) {
@@ -756,6 +837,27 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn parse_args(&mut self) -> u8 {
+        let mut argc = 0;
+        if !self.check(Token::RightParen) {
+            loop {
+                self.expr();
+                if argc == FuncUnit::MAX_ARGC {
+                    self.err("Too many args".to_string());
+                    break; //FIXME check this
+                }
+
+                argc += 1;
+                if !self.consume_if(Token::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(Token::RightParen);
+
+        argc
+    }
+
     fn binary(&mut self, _assign: bool) {
         let operator = self.prev().token;
         let precedence = self.rule(&operator).2;
@@ -794,27 +896,26 @@ impl<'a> Parser<'a> {
         self.add_code(code);
     }
 
+    fn call(&mut self, _: bool) {
+        let args = self.parse_args();
+        self.add_code(OpCode::Call(args));
+    }
+
     fn add_code(&mut self, code: OpCode) -> usize {
-        //FIXME think of this mess
         let pos = if self.current > 0 {
             self.prev().pos
         } else {
-            self.lexemes[0].pos
+            self.current().pos
         };
 
-        self.chunk.write(code, pos)
+        self.cunit.chunk_mut().write(code, pos)
     }
 
-    //FIXME just pass a jump with usize inside
-    fn patch_jump(&mut self, i: usize, _: fn(usize) -> OpCode) {
-        self.tweak_jump(i);
-    }
-
-    fn tweak_jump(&mut self, i: usize) {
+    fn finish_jump(&mut self, i: usize) {
         let jump = self.last_op_code_index() - i;
 
         use OpCode::*;
-        let jump = match &self.chunk.codes()[i] {
+        let jump = match &self.cunit.chunk().codes()[i] {
             Jump(_) => Jump(jump),
             CaseJump(_) => CaseJump(jump),
             DefaultCaseJump(_) => DefaultCaseJump(jump),
@@ -825,7 +926,11 @@ impl<'a> Parser<'a> {
             code => panic!("Cannot change non-jump opcode \"{:?}\".", code),
         };
 
-        self.chunk.write_at(i, jump);
+        self.cunit.chunk_mut().write_at(i, jump);
+    }
+
+    fn code_len(&self) -> usize {
+        self.cunit.chunk().codes().len()
     }
 }
 
@@ -915,8 +1020,11 @@ impl Scope {
     }
 
     fn init_last(&mut self) {
-        let last = self.vars.pop();
-        if let Some(mut last) = last {
+        if self.depth == 0 {
+            return;
+        }
+
+        if let Some(mut last) = self.vars.pop() {
             last.depth = self.depth as isize;
             self.vars.push(last);
         }
@@ -1011,7 +1119,7 @@ impl ControlFlow {
         self.switch_breaks.entry(self.switch_depth).or_default()
     }
 
-    fn continues(&self) -> usize {
+    fn continue_jump(&self) -> usize {
         *self
             .continue_jumps
             .get(&self.loop_depth)

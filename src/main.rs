@@ -68,10 +68,10 @@ fn repl() {
 
 fn interpret(src: String) -> VmResult {
     let mut compiler = Compiler::new();
-    let chunk = compiler.compile(src);
+    let frame = compiler.compile(src);
 
-    let mut vm = Vm::new(None);
-    vm.run(chunk)?;
+    let mut vm = Vm::new(None, frame);
+    vm.run()?;
 
     Ok(())
 }

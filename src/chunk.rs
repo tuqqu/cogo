@@ -1,12 +1,15 @@
 use std::fmt;
 
 use crate::lexer::lexeme::Pos;
+use crate::unit::CompilationUnit;
 use crate::value::{ValType, Value};
 
 #[derive(Debug, Clone)]
 pub enum OpCode {
+    // Control
     Defer,
     Noop,
+    Pop,
 
     // Unary
     Negate,
@@ -19,6 +22,9 @@ pub enum OpCode {
     Multiply,
     Divide,
     Remainder,
+
+    //Misc
+    Call(u8),
 
     Equal,
     NotEqual,
@@ -37,10 +43,9 @@ pub enum OpCode {
     CaseBreakJump(usize),
     DoCaseBreakJump,
     Fallthrough,
-
     Continue,
-    Return,
-    Pop,
+    Return(bool),
+    Exit,
 
     Bool(Value),
     Int(Value),
@@ -48,6 +53,7 @@ pub enum OpCode {
     Float(Value),
     FloatLiteral(Value),
     String(Value),
+    Func(CompilationUnit),
     Nil,
 
     VarGlobal(String, Option<ValType>),
@@ -59,6 +65,7 @@ pub enum OpCode {
     SetLocal(usize),
 
     ValidateType(ValType),
+    ValidateTypeAt(ValType, usize), //FIXME
     PutDefaultValue(ValType),
 }
 
@@ -82,16 +89,16 @@ impl Chunk {
         }
     }
 
-    pub fn write(&mut self, byte: OpCode, pos: Pos) -> usize {
-        self.codes.push(byte);
+    pub fn write(&mut self, op_code: OpCode, pos: Pos) -> usize {
+        self.codes.push(op_code);
         self.pos.push(pos);
 
         self.codes.len() - 1
     }
 
-    pub fn write_at(&mut self, at: usize, byte: OpCode) {
+    pub fn write_at(&mut self, at: usize, op_code: OpCode) {
         if self.codes.len() > at {
-            self.codes[at] = byte;
+            self.codes[at] = op_code;
         } else {
             panic!("Trying to overwrite a non-existent op code.");
         }

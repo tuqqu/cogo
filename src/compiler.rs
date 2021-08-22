@@ -1,11 +1,10 @@
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::OpCode;
 use crate::lexer::lexeme::Pos;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
+use crate::vm::CUnitFrame;
 
-pub struct Compiler {
-    chunk: Chunk,
-}
+pub struct Compiler {}
 
 impl Default for Compiler {
     fn default() -> Self {
@@ -15,12 +14,10 @@ impl Default for Compiler {
 
 impl Compiler {
     pub fn new() -> Self {
-        Self {
-            chunk: Chunk::new(),
-        }
+        Self {}
     }
 
-    pub fn compile(&mut self, src: String) -> &Chunk {
+    pub fn compile(&mut self, src: String) -> CUnitFrame {
         let mut lexer = Lexer::new(src);
         let (lexemes, errors) = lexer.lex(); //FIXME: handle errs
 
@@ -32,10 +29,11 @@ impl Compiler {
         }
 
         let mut parser = Parser::new(lexemes);
-        self.chunk = parser.parse();
-        self.chunk.write(OpCode::Return, Pos(0, 0));
+        let mut cunit = parser.parse();
+        cunit.chunk_mut().write(OpCode::Exit, Pos(0, 0));
 
-        eprintln!("\x1b[0;34m{:#?}\x1b[0m", self.chunk);
-        &self.chunk
+        eprintln!("\x1b[0;34m{:#?}\x1b[0m", cunit.chunk());
+
+        CUnitFrame::new(cunit)
     }
 }
