@@ -1,5 +1,5 @@
-use crate::chunk::Chunk;
-use crate::value::ValType;
+use crate::compiler::opcode::Chunk;
+use crate::compiler::value::ValType;
 
 #[derive(Clone, Debug)]
 pub enum CompilationUnit {

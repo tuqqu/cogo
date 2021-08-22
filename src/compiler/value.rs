@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::mem::discriminant;
+use std::mem;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -291,7 +291,7 @@ impl Value {
     }
 
     pub fn equal(&self, other: &Self) -> OperationResult<Self> {
-        if discriminant(self) != discriminant(other) {
+        if mem::discriminant(self) != mem::discriminant(other) {
             return Err(TypeError(format!(
                 "Both operands must be of same types, got \"{}\" and \"{}\"",
                 self.get_type().name(),
@@ -462,7 +462,7 @@ impl Value {
     }
 
     pub fn same_type(&self, other: &Self) -> bool {
-        discriminant(self) == discriminant(other)
+        mem::discriminant(self) == mem::discriminant(other)
     }
 }
 

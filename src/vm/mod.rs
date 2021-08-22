@@ -1,130 +1,20 @@
 use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
-use std::io::Error;
 use std::rc::Rc;
-use std::{io, result};
+use std::result;
 
-use crate::chunk::OpCode;
-use crate::name_table::{NameError, NameTable};
-use crate::unit::{CompilationUnit as CUnit, FuncUnit};
-use crate::value::{TypeError, Value};
+use self::error::VmError;
+use self::io::{StdStreamProvider, StreamProvider};
+use self::name_table::NameTable;
+use self::stack::VmStack;
+use crate::compiler::unit::{CompilationUnit as CUnit, FuncUnit};
+use crate::compiler::value::Value;
+use crate::compiler::OpCode;
 
-#[derive(Debug)]
-struct VmStack<T> {
-    stack: Vec<T>,
-}
-
-#[derive(Debug)]
-struct StackUnderflow;
-type PopResult<T> = result::Result<T, StackUnderflow>;
-
-impl<T> VmStack<T> {
-    fn new() -> Self {
-        Self { stack: Vec::new() }
-    }
-
-    fn push(&mut self, v: T) {
-        self.stack.push(v);
-    }
-
-    fn pop(&mut self) -> PopResult<T> {
-        if let Some(v) = self.stack.pop() {
-            Ok(v)
-        } else {
-            Err(StackUnderflow)
-        }
-    }
-
-    fn retrieve(&self) -> &T {
-        self.retrieve_at(self.stack.len() - 1)
-    }
-
-    fn retrieve_at(&self, i: usize) -> &T {
-        self.stack
-            .get(i)
-            .expect("Cannot retrieve value from stack.")
-    }
-
-    fn retrieve_by(&self, by: usize) -> &T {
-        self.retrieve_at(self.stack.len() - by - 1)
-    }
-
-    fn last_mut(&mut self) -> &mut T {
-        self.stack
-            .last_mut()
-            .expect("Cannot retrieve mutable reference on an empty stack.")
-    }
-
-    fn put_at(&mut self, i: usize, v: T) {
-        self.stack[i] = v;
-    }
-
-    fn len(&self) -> usize {
-        self.stack.len()
-    }
-}
-
-type WriteStream = dyn io::Write;
-type ReadStream = dyn io::Read;
-
-type StdoutStream = Rc<RefCell<WriteStream>>;
-type StderrStream = Rc<RefCell<WriteStream>>;
-type StdinStream = Rc<RefCell<ReadStream>>;
-
-pub trait StreamProvider {
-    fn stream_out(&self) -> RefMut<WriteStream>;
-    fn stream_err(&self) -> RefMut<WriteStream>;
-    fn stream_in(&self) -> RefMut<ReadStream>;
-}
-
-pub struct StdStreamProvider {
-    stdout: StdoutStream,
-    stderr: StderrStream,
-    stdin: StdinStream,
-}
-
-pub type StdStreams = (
-    Option<StdoutStream>,
-    Option<StderrStream>,
-    Option<StdinStream>,
-);
-
-impl StdStreamProvider {
-    pub fn new(streams: Option<StdStreams>) -> Self {
-        let streams = streams.unwrap_or((None, None, None));
-        let (stdout, stderr, stdin) = (
-            streams
-                .0
-                .unwrap_or_else(|| Rc::new(RefCell::new(std::io::stdout()))),
-            streams
-                .1
-                .unwrap_or_else(|| Rc::new(RefCell::new(std::io::stderr()))),
-            streams
-                .2
-                .unwrap_or_else(|| Rc::new(RefCell::new(std::io::stdin()))),
-        );
-
-        Self {
-            stdout,
-            stderr,
-            stdin,
-        }
-    }
-}
-
-impl StreamProvider for StdStreamProvider {
-    fn stream_out(&self) -> RefMut<WriteStream> {
-        self.stdout.borrow_mut()
-    }
-
-    fn stream_err(&self) -> RefMut<WriteStream> {
-        self.stderr.borrow_mut()
-    }
-
-    fn stream_in(&self) -> RefMut<ReadStream> {
-        self.stdin.borrow_mut()
-    }
-}
+mod error;
+pub mod io;
+mod name_table;
+mod stack;
 
 enum VmNamedValue {
     Var(Value),
@@ -584,36 +474,6 @@ impl Vm {
             },
             _ => panic!("Wrong cunit type"),
         }
-    }
-}
-
-#[derive(Debug)]
-pub enum VmError {
-    Compile(String),
-    Runtime(String),
-}
-
-impl From<StackUnderflow> for VmError {
-    fn from(_: StackUnderflow) -> Self {
-        Self::Compile("Stack Underflow error".to_string())
-    }
-}
-
-impl From<TypeError> for VmError {
-    fn from(e: TypeError) -> Self {
-        Self::Runtime(e.0)
-    }
-}
-
-impl From<io::Error> for VmError {
-    fn from(_: Error) -> Self {
-        Self::Runtime("Runtime error".to_string())
-    }
-}
-
-impl From<NameError> for VmError {
-    fn from(e: NameError) -> Self {
-        Self::Runtime(e.0)
     }
 }
 

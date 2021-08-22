@@ -1,7 +1,8 @@
 use std::fmt;
 
-mod token;
 pub use self::token::Token;
+
+mod token;
 
 type Literal = String;
 

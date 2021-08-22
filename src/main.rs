@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::{env, fs, io, process};
 
-use cogo::compiler::Compiler;
+use cogo::compiler::compile;
 use cogo::vm::{Vm, VmResult};
 
 fn main() {
@@ -67,8 +67,7 @@ fn repl() {
 }
 
 fn interpret(src: String) -> VmResult {
-    let mut compiler = Compiler::new();
-    let frame = compiler.compile(src);
+    let frame = compile(src);
 
     let mut vm = Vm::new(None, frame);
     vm.run()?;

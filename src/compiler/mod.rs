@@ -1,12 +1,41 @@
-use std::collections::HashMap;
 use std::mem;
 
-use crate::chunk::OpCode;
-use crate::lexer::lexeme::{Lexeme, Token};
-use crate::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit, Param};
-use crate::value::{ValType, Value};
+use self::flow::ControlFlow;
+pub use self::opcode::OpCode;
+use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit, Param};
+use self::value::{ValType, Value};
+use crate::compiler::scope::Scope;
+use crate::lex::lexeme::{Lexeme, Pos, Token};
+use crate::lex::Lexer;
+use crate::vm::CUnitFrame;
 
-pub struct Parser<'a> {
+mod flow;
+pub mod opcode;
+mod scope;
+pub mod unit;
+pub mod value;
+
+pub fn compile(src: String) -> CUnitFrame {
+    let mut lexer = Lexer::new(src);
+    let (lexemes, errors) = lexer.lex(); //FIXME: handle errs
+
+    if !errors.is_empty() {
+        for error in errors {
+            eprintln!("\x1b[0;31m{}\x1b[0m", error);
+        }
+        std::process::exit(1);
+    }
+
+    let mut parser = Compiler::new(lexemes);
+    let mut cunit = parser.compile();
+    cunit.chunk_mut().write(OpCode::Exit, Pos(0, 0));
+
+    eprintln!("\x1b[0;34m{:#?}\x1b[0m", cunit.chunk());
+
+    CUnitFrame::new(cunit)
+}
+
+pub struct Compiler<'a> {
     lexemes: &'a [Lexeme],
     current: usize,
     cunit: CUnit,
@@ -23,7 +52,7 @@ type ParseRule<T> = (
     Precedence,
 );
 
-impl<'a> Parser<'a> {
+impl<'a> Compiler<'a> {
     pub fn new(lexemes: &'a [Lexeme]) -> Self {
         Self {
             lexemes,
@@ -36,7 +65,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> CUnit {
+    pub fn compile(&mut self) -> CUnit {
         self.add_code(OpCode::Noop);
 
         while !self.consume_if(Token::Eof) {
@@ -304,7 +333,7 @@ impl<'a> Parser<'a> {
             self.expr();
             self.consume(Token::Semicolon);
             self.add_code(OpCode::Defer);
-        // FIXME: defer/debug
+            // FIXME: defer/debug
         } else if self.consume_if(Token::For) {
             self.stmt_for();
         } else if self.consume_if(Token::Switch) {
@@ -964,177 +993,5 @@ impl Precedence {
             Self::Call => Self::Primary,
             Self::Primary => Self::Primary,
         }
-    }
-}
-
-#[derive(Debug)]
-struct Scope {
-    vars: Vec<Local>,
-    depth: usize,
-}
-
-impl Scope {
-    fn new() -> Self {
-        Self {
-            vars: Vec::new(),
-            depth: 0,
-        }
-    }
-
-    fn add_var(&mut self, name: String) {
-        self.vars.push(Local {
-            name,
-            depth: -1,
-            mutable: true,
-        });
-    }
-
-    fn add_const(&mut self, name: String) {
-        self.vars.push(Local {
-            name,
-            depth: -1,
-            mutable: false,
-        });
-    }
-
-    fn has_defined(&self, name: &str) -> bool {
-        for var in &self.vars {
-            if var.depth != -1 && var.depth < self.depth as isize {
-                break;
-            } else if name == var.name {
-                return true;
-            }
-        }
-
-        false
-    }
-
-    fn resolve(&self, name: &str) -> Option<(usize, bool)> {
-        for i in (0..self.vars.len()).rev() {
-            if self.vars[i].name == *name {
-                return Some((i, self.vars[i].mutable));
-            }
-        }
-
-        None
-    }
-
-    fn init_last(&mut self) {
-        if self.depth == 0 {
-            return;
-        }
-
-        if let Some(mut last) = self.vars.pop() {
-            last.depth = self.depth as isize;
-            self.vars.push(last);
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Local {
-    name: String,
-    mutable: bool,
-    depth: isize,
-}
-
-#[derive(Debug)]
-struct ControlFlow {
-    continue_jumps: HashMap<usize, usize>,
-    loop_breaks: HashMap<usize, Vec<usize>>,
-    switch_breaks: HashMap<usize, Vec<usize>>,
-    loop_depth: usize,
-    switch_depth: usize,
-    break_stack: Vec<BreakState>,
-}
-
-#[derive(Debug)]
-enum BreakState {
-    Switch,
-    Loop,
-}
-
-impl ControlFlow {
-    fn new() -> Self {
-        Self {
-            continue_jumps: HashMap::new(),
-            loop_breaks: HashMap::new(),
-            switch_breaks: HashMap::new(),
-            loop_depth: 0,
-            switch_depth: 0,
-            break_stack: Vec::new(),
-        }
-    }
-
-    fn enter_switch(&mut self) {
-        self.switch_depth += 1;
-        self.break_stack.push(BreakState::Switch);
-    }
-
-    fn leave_switch(&mut self) {
-        self.switch_depth -= 1;
-        self.break_stack.pop();
-    }
-
-    fn enter_loop(&mut self) {
-        self.loop_depth += 1;
-        self.break_stack.push(BreakState::Loop);
-    }
-
-    fn leave_loop(&mut self) {
-        self.loop_depth -= 1;
-        self.break_stack.pop();
-    }
-
-    fn add_break(&mut self, jump: usize) {
-        match self.break_stack.last().expect("Cannot get state") {
-            BreakState::Loop => self.add_loop_break(jump),
-            BreakState::Switch => self.add_switch_break(jump),
-        }
-    }
-
-    fn add_loop_break(&mut self, jump: usize) {
-        self.loop_breaks
-            .entry(self.loop_depth)
-            .or_default()
-            .push(jump);
-    }
-
-    fn add_switch_break(&mut self, jump: usize) {
-        self.switch_breaks
-            .entry(self.switch_depth)
-            .or_default()
-            .push(jump);
-    }
-
-    fn add_continue(&mut self, jump: usize) {
-        self.continue_jumps.insert(self.loop_depth, jump);
-    }
-
-    fn loop_breaks(&mut self) -> &mut Vec<usize> {
-        self.loop_breaks.entry(self.loop_depth).or_default()
-    }
-
-    fn switch_breaks(&mut self) -> &mut Vec<usize> {
-        self.switch_breaks.entry(self.switch_depth).or_default()
-    }
-
-    fn continue_jump(&self) -> usize {
-        *self
-            .continue_jumps
-            .get(&self.loop_depth)
-            .expect("No continue jump found")
-    }
-
-    fn is_breakable(&self) -> bool {
-        self.loop_depth != 0 || self.switch_depth != 0
-    }
-
-    fn is_continuable(&self) -> bool {
-        self.loop_depth != 0
-    }
-
-    fn is_fallthroughable(&self) -> bool {
-        self.switch_depth != 0
     }
 }

@@ -1,8 +1,8 @@
 use std::fmt;
 
-use crate::lexer::lexeme::Pos;
-use crate::unit::CompilationUnit;
-use crate::value::{ValType, Value};
+use super::unit::CompilationUnit;
+use super::value::{ValType, Value};
+use crate::lex::lexeme::Pos;
 
 #[derive(Debug, Clone)]
 pub enum OpCode {
