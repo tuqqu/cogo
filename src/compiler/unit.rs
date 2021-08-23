@@ -1,5 +1,5 @@
-use crate::compiler::opcode::Chunk;
-use crate::compiler::value::ValType;
+use super::opcode::Chunk;
+use super::value::ValType;
 
 #[derive(Clone, Debug)]
 pub enum CompilationUnit {
@@ -25,16 +25,21 @@ impl CompilationUnit {
 
 #[derive(Clone, Debug)]
 pub struct PackageUnit {
-    pub name: String,
-    pub codes: Chunk,
+    //FIXME use package object
+    name: String,
+    codes: Chunk,
 }
 
 impl PackageUnit {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             name: "".to_string(),
             codes: Chunk::new(),
         }
+    }
+
+    pub(super) fn set_name(&mut self, name: String) {
+        self.name = name;
     }
 }
 
@@ -46,16 +51,16 @@ impl Default for PackageUnit {
 
 #[derive(Clone, Debug)]
 pub struct FuncUnit {
-    pub params: Vec<Param>,
-    pub ret_type: Option<ValType>,
-    pub name: String,
-    pub codes: Chunk,
+    pub(crate) params: Vec<Param>,
+    pub(crate) ret_type: Option<ValType>,
+    pub(crate) name: String,
+    codes: Chunk,
 }
 
 impl FuncUnit {
-    pub const MAX_ARGC: u8 = u8::MAX;
+    pub(super) const MAX_ARGC: u8 = u8::MAX;
 
-    pub fn new(name: Option<String>) -> Self {
+    pub(super) fn new(name: Option<String>) -> Self {
         Self::from_codes(name, Chunk::new())
     }
 
@@ -76,10 +81,11 @@ pub struct Param {
 }
 
 impl Param {
-    pub fn new(name: String, v_type: ValType) -> Self {
+    pub(super) fn new(name: String, v_type: ValType) -> Self {
         Self { name, v_type }
     }
 
+    #[allow(dead_code)]
     pub fn name(&self) -> &str {
         &self.name
     }

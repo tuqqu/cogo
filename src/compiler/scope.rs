@@ -1,18 +1,18 @@
 #[derive(Debug)]
-pub struct Scope {
-    pub vars: Vec<Local>,
-    pub depth: usize,
+pub(super) struct Scope {
+    pub(super) vars: Vec<Local>,
+    pub(super) depth: usize,
 }
 
 impl Scope {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             vars: Vec::new(),
             depth: 0,
         }
     }
 
-    pub fn add_var(&mut self, name: String) {
+    pub(super) fn add_var(&mut self, name: String) {
         self.vars.push(Local {
             name,
             depth: -1,
@@ -20,7 +20,7 @@ impl Scope {
         });
     }
 
-    pub fn add_const(&mut self, name: String) {
+    pub(super) fn add_const(&mut self, name: String) {
         self.vars.push(Local {
             name,
             depth: -1,
@@ -28,7 +28,7 @@ impl Scope {
         });
     }
 
-    pub fn has_defined(&self, name: &str) -> bool {
+    pub(super) fn has_defined(&self, name: &str) -> bool {
         for var in &self.vars {
             if var.depth != -1 && var.depth < self.depth as isize {
                 break;
@@ -40,7 +40,7 @@ impl Scope {
         false
     }
 
-    pub fn resolve(&self, name: &str) -> Option<(usize, bool)> {
+    pub(super) fn resolve(&self, name: &str) -> Option<(usize, bool)> {
         //FIXME fix the var x = x scoped problem
         for i in (0..self.vars.len()).rev() {
             if self.vars[i].name == *name {
@@ -51,7 +51,7 @@ impl Scope {
         None
     }
 
-    pub fn init_last(&mut self) {
+    pub(super) fn init_last(&mut self) {
         if self.depth == 0 {
             return;
         }
@@ -64,8 +64,8 @@ impl Scope {
 }
 
 #[derive(Debug)]
-pub struct Local {
-    pub name: String,
-    pub mutable: bool,
-    pub depth: isize,
+pub(super) struct Local {
+    pub(super) name: String,
+    pub(super) mutable: bool,
+    pub(super) depth: isize,
 }

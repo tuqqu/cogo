@@ -1,7 +1,8 @@
 use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Debug, Eq, Hash)]
-pub enum Token {
+#[allow(dead_code)]
+pub(crate) enum Token {
     // Operators
     Colon,
     Semicolon,
@@ -131,7 +132,7 @@ pub enum Token {
 }
 
 impl Token {
-    pub fn to_string(&self) -> &'static str {
+    pub(crate) fn str_value(&self) -> &'static str {
         match self {
             Self::Colon => ":",
             Self::Semicolon => ";",
@@ -266,7 +267,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Identifier => write!(f, "identifier"),
-            _ => write!(f, "{}", self.to_string()),
+            _ => write!(f, "{}", self.str_value()),
         }
     }
 }

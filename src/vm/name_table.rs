@@ -12,22 +12,22 @@ use std::result;
 // }
 
 #[derive(Debug)]
-pub struct NameTable<N> {
+pub(super) struct NameTable<N> {
     funcs: HashMap<String, N>,
 }
 
-pub struct NameError(pub(crate) String);
+pub(super) struct NameError(pub(crate) String);
 
-pub type NameResult<T> = result::Result<T, NameError>;
+type NameResult<T> = result::Result<T, NameError>;
 
 impl<N> NameTable<N> {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             funcs: HashMap::new(),
         }
     }
 
-    pub fn insert(&mut self, name: String, func: N) -> NameResult<()> {
+    pub(super) fn insert(&mut self, name: String, func: N) -> NameResult<()> {
         if self.funcs.contains_key(&name) {
             return Err(NameError(format!("Name {} already exists", name)));
         }
@@ -37,7 +37,7 @@ impl<N> NameTable<N> {
         Ok(())
     }
 
-    pub fn get(&mut self, name: &str) -> NameResult<&N> {
+    pub(super) fn get(&mut self, name: &str) -> NameResult<&N> {
         let func = self.funcs.get(name);
         if let Some(func) = func {
             Ok(func)

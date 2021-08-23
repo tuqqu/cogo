@@ -2,9 +2,9 @@ use self::error::LexerError;
 use self::lexeme::{Lexeme, Pos, Token};
 
 mod error;
-pub mod lexeme;
+pub(crate) mod lexeme;
 
-pub struct Lexer {
+pub(crate) struct Lexer {
     src: String,
     lexemes: Vec<Lexeme>,
     start: usize,
@@ -15,7 +15,7 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(src: String) -> Self {
+    pub(crate) fn new(src: String) -> Self {
         Self {
             src,
             lexemes: vec![],
@@ -27,7 +27,7 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&mut self) -> (&[Lexeme], &[LexerError]) {
+    pub(crate) fn lex(&mut self) -> (&[Lexeme], &[LexerError]) {
         while !self.is_at_end() {
             self.start = self.current;
             self.token();

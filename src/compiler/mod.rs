@@ -1,7 +1,7 @@
 use std::mem;
 
 use self::flow::ControlFlow;
-pub use self::opcode::OpCode;
+pub(crate) use self::opcode::OpCode;
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit, Param};
 use self::value::{ValType, Value};
 use crate::compiler::scope::Scope;
@@ -12,8 +12,8 @@ use crate::vm::CUnitFrame;
 mod flow;
 mod opcode;
 mod scope;
-pub mod unit;
-pub mod value;
+pub(crate) mod unit;
+pub(crate) mod value;
 
 pub fn compile(src: String) -> CUnitFrame {
     let mut lexer = Lexer::new(src);
@@ -35,7 +35,7 @@ pub fn compile(src: String) -> CUnitFrame {
     CUnitFrame::new(cunit)
 }
 
-pub struct Compiler<'a> {
+struct Compiler<'a> {
     lexemes: &'a [Lexeme],
     current: usize,
     cunit: CUnit,
@@ -54,7 +54,7 @@ type ParseRule<T> = (
 );
 
 impl<'a> Compiler<'a> {
-    pub fn new(lexemes: &'a [Lexeme]) -> Self {
+    fn new(lexemes: &'a [Lexeme]) -> Self {
         Self {
             lexemes,
             current: 0,
@@ -67,7 +67,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn compile(&mut self) -> CUnit {
+    fn compile(&mut self) -> CUnit {
         self.add_code(OpCode::Noop);
         self.decl_package();
 
@@ -88,7 +88,7 @@ impl<'a> Compiler<'a> {
         if self.consume_if(Token::Package) {
             let name = self.parse_var().to_string();
             if let CUnit::Package(p) = &mut self.cunit {
-                p.name = name.clone();
+                p.set_name(name.clone());
                 self.cur_package = Some(Package(name));
             } else {
                 panic!("Unreachable code"); //FIXME

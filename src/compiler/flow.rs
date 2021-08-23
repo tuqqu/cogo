@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub(crate) struct ControlFlow {
+pub(super) struct ControlFlow {
     continue_jumps: HashMap<usize, usize>,
     loop_breaks: HashMap<usize, Vec<usize>>,
     switch_breaks: HashMap<usize, Vec<usize>>,
@@ -17,7 +17,7 @@ enum BreakState {
 }
 
 impl ControlFlow {
-    pub(crate) fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             continue_jumps: HashMap::new(),
             loop_breaks: HashMap::new(),
@@ -28,75 +28,75 @@ impl ControlFlow {
         }
     }
 
-    pub(crate) fn enter_switch(&mut self) {
+    pub(super) fn enter_switch(&mut self) {
         self.switch_depth += 1;
         self.break_stack.push(BreakState::Switch);
     }
 
-    pub(crate) fn leave_switch(&mut self) {
+    pub(super) fn leave_switch(&mut self) {
         self.switch_depth -= 1;
         self.break_stack.pop();
     }
 
-    pub(crate) fn enter_loop(&mut self) {
+    pub(super) fn enter_loop(&mut self) {
         self.loop_depth += 1;
         self.break_stack.push(BreakState::Loop);
     }
 
-    pub(crate) fn leave_loop(&mut self) {
+    pub(super) fn leave_loop(&mut self) {
         self.loop_depth -= 1;
         self.break_stack.pop();
     }
 
-    pub(crate) fn add_break(&mut self, jump: usize) {
+    pub(super) fn add_break(&mut self, jump: usize) {
         match self.break_stack.last().expect("Cannot get state") {
             BreakState::Loop => self.add_loop_break(jump),
             BreakState::Switch => self.add_switch_break(jump),
         }
     }
 
-    pub(crate) fn add_loop_break(&mut self, jump: usize) {
+    pub(super) fn add_loop_break(&mut self, jump: usize) {
         self.loop_breaks
             .entry(self.loop_depth)
             .or_default()
             .push(jump);
     }
 
-    pub(crate) fn add_switch_break(&mut self, jump: usize) {
+    pub(super) fn add_switch_break(&mut self, jump: usize) {
         self.switch_breaks
             .entry(self.switch_depth)
             .or_default()
             .push(jump);
     }
 
-    pub(crate) fn add_continue(&mut self, jump: usize) {
+    pub(super) fn add_continue(&mut self, jump: usize) {
         self.continue_jumps.insert(self.loop_depth, jump);
     }
 
-    pub(crate) fn loop_breaks(&mut self) -> &mut Vec<usize> {
+    pub(super) fn loop_breaks(&mut self) -> &mut Vec<usize> {
         self.loop_breaks.entry(self.loop_depth).or_default()
     }
 
-    pub(crate) fn switch_breaks(&mut self) -> &mut Vec<usize> {
+    pub(super) fn switch_breaks(&mut self) -> &mut Vec<usize> {
         self.switch_breaks.entry(self.switch_depth).or_default()
     }
 
-    pub(crate) fn continue_jump(&self) -> usize {
+    pub(super) fn continue_jump(&self) -> usize {
         *self
             .continue_jumps
             .get(&self.loop_depth)
             .expect("No continue jump found")
     }
 
-    pub(crate) fn is_breakable(&self) -> bool {
+    pub(super) fn is_breakable(&self) -> bool {
         self.loop_depth != 0 || self.switch_depth != 0
     }
 
-    pub(crate) fn is_continuable(&self) -> bool {
+    pub(super) fn is_continuable(&self) -> bool {
         self.loop_depth != 0
     }
 
-    pub(crate) fn is_fallthroughable(&self) -> bool {
+    pub(super) fn is_fallthroughable(&self) -> bool {
         self.switch_depth != 0
     }
 }

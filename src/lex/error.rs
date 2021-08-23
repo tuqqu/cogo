@@ -3,7 +3,7 @@ use std::{error, fmt};
 use super::lexeme::Pos;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LexerError {
+pub(crate) enum LexerError {
     /// Error when a comment has no closing delimiter.
     UnclosedComment(Pos),
     /// Unknown character when scanning the source.

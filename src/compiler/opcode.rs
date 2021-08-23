@@ -5,6 +5,7 @@ use super::value::{ValType, Value};
 use crate::lex::lexeme::Pos;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum OpCode {
     // Control
     Defer,
@@ -82,21 +83,21 @@ impl Default for Chunk {
 }
 
 impl Chunk {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             codes: vec![],
             pos: vec![],
         }
     }
 
-    pub fn write(&mut self, op_code: OpCode, pos: Pos) -> usize {
+    pub(crate) fn write(&mut self, op_code: OpCode, pos: Pos) -> usize {
         self.codes.push(op_code);
         self.pos.push(pos);
 
         self.codes.len() - 1
     }
 
-    pub fn write_at(&mut self, at: usize, op_code: OpCode) {
+    pub(crate) fn write_at(&mut self, at: usize, op_code: OpCode) {
         if self.codes.len() > at {
             self.codes[at] = op_code;
         } else {
@@ -104,7 +105,7 @@ impl Chunk {
         }
     }
 
-    pub fn codes(&self) -> &[OpCode] {
+    pub(crate) fn codes(&self) -> &[OpCode] {
         &self.codes
     }
 }

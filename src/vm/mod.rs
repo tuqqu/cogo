@@ -47,16 +47,6 @@ impl Vm {
         }
     }
 
-    pub fn current_frame(&self) -> Ref<CUnitFrame> {
-        let last_frame = self.frames.retrieve_at(self.current_frame);
-        last_frame.borrow()
-    }
-
-    pub fn current_frame_mut(&mut self) -> RefMut<CUnitFrame> {
-        let last_frame = self.frames.retrieve_at(self.current_frame);
-        last_frame.borrow_mut()
-    }
-
     pub fn run(&mut self) -> VmResult {
         let mut match_val: Option<Value> = None;
         let mut switches: VmStack<Switch> = VmStack::new();
@@ -455,6 +445,16 @@ impl Vm {
         }
     }
 
+    fn current_frame(&self) -> Ref<CUnitFrame> {
+        let last_frame = self.frames.retrieve_at(self.current_frame);
+        last_frame.borrow()
+    }
+
+    fn current_frame_mut(&mut self) -> RefMut<CUnitFrame> {
+        let last_frame = self.frames.retrieve_at(self.current_frame);
+        last_frame.borrow_mut()
+    }
+
     fn discard_frame_stack(&mut self) -> VmResult {
         if self.stack.len() != 0 {
             while self.stack.len() >= self.current_frame().stack_pos {
@@ -503,7 +503,7 @@ pub struct CUnitFrame {
 }
 
 impl CUnitFrame {
-    pub fn new(cunit: CUnit) -> Self {
+    pub(crate) fn new(cunit: CUnit) -> Self {
         Self {
             cunit,
             pointer: 0,
@@ -511,15 +511,15 @@ impl CUnitFrame {
         }
     }
 
-    pub fn inc_pointer(&mut self, by: usize) {
+    fn inc_pointer(&mut self, by: usize) {
         self.pointer += by;
     }
 
-    pub fn dec_pointer(&mut self, by: usize) {
+    fn dec_pointer(&mut self, by: usize) {
         self.pointer -= by;
     }
 
-    pub fn next(&self) -> Option<OpCode> {
+    fn next(&self) -> Option<OpCode> {
         if self.pointer >= self.cunit.chunk().codes().len() {
             None
         } else {
