@@ -140,6 +140,19 @@ impl<'a> Compiler<'a> {
         self.consume(Token::Semicolon);
     }
 
+    fn stmt_decl_short_var(&mut self) {
+        self.expr_decl_short_var();
+        self.consume(Token::Semicolon);
+    }
+
+    fn expr_decl_short_var(&mut self) {
+        let name = self.parse_var().to_string();
+        self.consume(Token::ColonEqual);
+        self.decl_scoped_var(name.clone());
+        self.expr();
+        self.def_var(name, None, false);
+    }
+
     fn def_var(&mut self, name: String, val_type: Option<ValType>, validate: bool) {
         if self.is_global_scope() {
             self.add_code(OpCode::VarGlobal(name, val_type));
@@ -304,6 +317,11 @@ impl<'a> Compiler<'a> {
         &self.lexemes[self.current - 1]
     }
 
+    fn next(&self) -> &Lexeme {
+        // if self.current + 1 <= self.lexemes.len()
+        &self.lexemes[self.current + 1]
+    }
+
     fn consume(&mut self, tok: Token) {
         if self.current().token == tok {
             self.advance();
@@ -327,6 +345,10 @@ impl<'a> Compiler<'a> {
 
     fn check(&mut self, tok: Token) -> bool {
         self.current().token == tok
+    }
+
+    fn check_next(&mut self, tok: Token) -> bool {
+        self.next().token == tok
     }
 
     fn advance(&mut self) {
@@ -379,6 +401,8 @@ impl<'a> Compiler<'a> {
             self.stmt_break();
         } else if self.consume_if(Token::Return) {
             self.stmt_return();
+        } else if self.check(Token::Identifier) && self.check_next(Token::ColonEqual) {
+            self.stmt_decl_short_var();
         } else {
             self.stmt_expr();
         }
@@ -502,7 +526,7 @@ impl<'a> Compiler<'a> {
     fn last_op_code_index(&self) -> usize {
         let len = self.code_len();
         if len == 0 {
-            panic!("No opcodes to get the last index of.")
+            return 0; //09
         }
 
         len - 1
@@ -699,12 +723,23 @@ impl<'a> Compiler<'a> {
             (false, jump)
         } else {
             let jump = self.last_op_code_index();
-            self.expr();
+
+            let short_decl = if self.check(Token::Identifier) && self.check_next(Token::ColonEqual)
+            {
+                self.expr_decl_short_var();
+                true
+            } else {
+                self.expr();
+                false
+            };
 
             if self.check(Token::Semicolon) {
                 // for expr; expr; expr {}
                 self.consume(Token::Semicolon);
-                self.add_code(OpCode::Pop);
+                if !short_decl {
+                    self.add_code(OpCode::Pop);
+                }
+
                 let jump = self.last_op_code_index();
                 (true, jump)
             } else {
