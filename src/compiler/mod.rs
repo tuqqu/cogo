@@ -10,7 +10,7 @@ use crate::lex::Lexer;
 use crate::vm::CUnitFrame;
 
 mod flow;
-pub mod opcode;
+mod opcode;
 mod scope;
 pub mod unit;
 pub mod value;
@@ -43,6 +43,7 @@ pub struct Compiler<'a> {
     panic: bool,
     scope: Scope,
     control_flow: ControlFlow,
+    cur_package: Option<Package>,
 }
 
 type ParseCallback<T> = fn(&mut T, bool);
@@ -62,17 +63,41 @@ impl<'a> Compiler<'a> {
             panic: false,
             scope: Scope::new(),
             control_flow: ControlFlow::new(),
+            cur_package: None,
         }
     }
 
     pub fn compile(&mut self) -> CUnit {
         self.add_code(OpCode::Noop);
+        self.decl_package();
 
         while !self.consume_if(Token::Eof) {
             self.decl();
         }
 
+        self.add_entry_point();
         self.cunit.clone()
+    }
+
+    fn decl_package(&mut self) {
+        if !self.is_package_scope() {
+            self.err("Package declaration can be only in package level".to_string());
+            return;
+        }
+
+        if self.consume_if(Token::Package) {
+            let name = self.parse_var().to_string();
+            if let CUnit::Package(p) = &mut self.cunit {
+                p.name = name.clone();
+                self.cur_package = Some(Package(name));
+            } else {
+                panic!("Unreachable code"); //FIXME
+            }
+        } else {
+            self.err("Package declaration expected".to_string());
+        }
+
+        self.consume(Token::Semicolon);
     }
 
     fn decl(&mut self) {
@@ -83,7 +108,6 @@ impl<'a> Compiler<'a> {
         } else if self.consume_if(Token::Func) {
             self.decl_func();
         } else {
-            //FIXME err when in funit
             self.stmt();
         }
 
@@ -209,6 +233,11 @@ impl<'a> Compiler<'a> {
         if let CUnit::Function(funit) = &mut cunit {
             funit.params = params;
             funit.ret_type = ret_type;
+
+            match EntryPoint::check_entry_point(self.cur_package.as_ref().unwrap(), funit) {
+                Ok(()) => {}
+                Err(e) => self.err(e.0),
+            }
         } else {
             panic!("Compilation unit must be of function type");
         }
@@ -328,6 +357,8 @@ impl<'a> Compiler<'a> {
     }
 
     fn stmt(&mut self) {
+        self.err_if_package();
+
         // FIXME: change defer/debug
         if self.consume_if(Token::Defer) {
             self.expr();
@@ -440,6 +471,12 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn err_if_package(&mut self) {
+        if self.is_package_scope() {
+            self.err(format!("Unexpected token {}", self.current().token));
+        }
+    }
+
     fn is_global_scope(&self) -> bool {
         self.scope.depth == 0
     }
@@ -480,6 +517,7 @@ impl<'a> Compiler<'a> {
         self.parse_precedence(Precedence::Assignment)
     }
 
+    //FIXME var -> name
     fn parse_var(&mut self) -> &str {
         self.consume(Token::Identifier);
         &self.prev().literal
@@ -940,6 +978,11 @@ impl<'a> Compiler<'a> {
         self.cunit.chunk_mut().write(code, pos)
     }
 
+    fn add_entry_point(&mut self) {
+        self.add_code(OpCode::GetGlobal(EntryPoint::FUNC_NAME.to_string()));
+        self.add_code(OpCode::Call(0));
+    }
+
     fn finish_jump(&mut self, i: usize) {
         let jump = self.last_op_code_index() - i;
 
@@ -960,6 +1003,13 @@ impl<'a> Compiler<'a> {
 
     fn code_len(&self) -> usize {
         self.cunit.chunk().codes().len()
+    }
+
+    fn is_package_scope(&self) -> bool {
+        match self.cunit {
+            CUnit::Package(_) => true,
+            CUnit::Function(_) => false,
+        }
     }
 }
 
@@ -993,5 +1043,34 @@ impl Precedence {
             Self::Call => Self::Primary,
             Self::Primary => Self::Primary,
         }
+    }
+}
+
+struct Package(String);
+struct EntryPoint;
+struct SignError(String);
+type SignValidationResult = std::result::Result<(), SignError>;
+
+impl EntryPoint {
+    const PACK_NAME: &'static str = "main";
+    const FUNC_NAME: &'static str = "main";
+
+    fn check_entry_point(pack: &Package, funit: &FuncUnit) -> SignValidationResult {
+        if pack.0 == Self::PACK_NAME && funit.name == Self::FUNC_NAME {
+            if Self::validate_signature(funit) {
+                Ok(())
+            } else {
+                Err(SignError(format!(
+                    "Function \"{}\" must not have parameters and a return value",
+                    Self::FUNC_NAME,
+                )))
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_signature(funit: &FuncUnit) -> bool {
+        funit.ret_type.is_none() && funit.params.is_empty()
     }
 }

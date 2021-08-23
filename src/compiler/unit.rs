@@ -59,7 +59,7 @@ impl FuncUnit {
         Self::from_codes(name, Chunk::new())
     }
 
-    pub fn from_codes(name: Option<String>, codes: Chunk) -> Self {
+    fn from_codes(name: Option<String>, codes: Chunk) -> Self {
         Self {
             params: vec![],
             ret_type: None,
@@ -83,6 +83,7 @@ impl Param {
     pub fn name(&self) -> &str {
         &self.name
     }
+
     pub fn v_type(&self) -> &ValType {
         &self.v_type
     }

@@ -41,6 +41,7 @@ impl Scope {
     }
 
     pub fn resolve(&self, name: &str) -> Option<(usize, bool)> {
+        //FIXME fix the var x = x scoped problem
         for i in (0..self.vars.len()).rev() {
             if self.vars[i].name == *name {
                 return Some((i, self.vars[i].mutable));
