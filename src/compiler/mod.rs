@@ -46,7 +46,7 @@ struct Compiler<'a> {
     cur_package: Option<Package>,
 }
 
-type ParseCallback<T> = fn(&mut T, bool);
+type ParseCallback<T> = fn(&mut T);
 type ParseRule<T> = (
     Option<ParseCallback<T>>,
     Option<ParseCallback<T>>,
@@ -401,10 +401,8 @@ impl<'a> Compiler<'a> {
             self.stmt_break();
         } else if self.consume_if(Token::Return) {
             self.stmt_return();
-        } else if self.check(Token::Identifier) && self.check_next(Token::ColonEqual) {
-            self.stmt_decl_short_var();
         } else {
-            self.stmt_expr();
+            self.stmt_simple();
         }
     }
 
@@ -412,6 +410,16 @@ impl<'a> Compiler<'a> {
         self.begin_scope();
         self.block_body();
         self.end_scope();
+    }
+
+    fn stmt_simple(&mut self) {
+        if self.check(Token::Identifier) && self.check_next(Token::ColonEqual) {
+            self.stmt_decl_short_var();
+        } else if self.check(Token::Identifier) && self.check_next(Token::Equal) {
+            self.stmt_assign();
+        } else {
+            self.stmt_expr();
+        }
     }
 
     fn stmt_continue(&mut self) {
@@ -533,12 +541,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn expr(&mut self) {
-        self.parse_precedence(Precedence::Assignment)
+        self.parse_precedence(Precedence::Or)
     }
 
     // FIXME: make parse only const expressions
     fn expr_const(&mut self) {
-        self.parse_precedence(Precedence::Assignment)
+        self.parse_precedence(Precedence::Or)
     }
 
     //FIXME var -> name
@@ -728,6 +736,9 @@ impl<'a> Compiler<'a> {
             {
                 self.expr_decl_short_var();
                 true
+            } else if self.check(Token::Identifier) && self.check_next(Token::Equal) {
+                self.expr_assign();
+                true
             } else {
                 self.expr();
                 false
@@ -766,8 +777,14 @@ impl<'a> Compiler<'a> {
 
             self.control_flow.add_continue(exit_jump);
 
-            self.expr();
-            self.add_code(OpCode::Pop);
+            if self.check(Token::Identifier) && self.check_next(Token::ColonEqual) {
+                self.expr_decl_short_var();
+            } else if self.check(Token::Identifier) && self.check_next(Token::Equal) {
+                self.expr_assign();
+            } else {
+                self.expr();
+                self.add_code(OpCode::Pop);
+            };
 
             self.add_code(OpCode::BackJump(self.code_len() - exit_jump));
             exit_jump = inc_begin;
@@ -823,14 +840,14 @@ impl<'a> Compiler<'a> {
         self.finish_jump(jump);
     }
 
-    fn and(&mut self, _: bool) {
+    fn and(&mut self) {
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
         self.parse_precedence(Precedence::And);
         self.finish_jump(if_jump);
     }
 
-    fn or(&mut self, _: bool) {
+    fn or(&mut self) {
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         let jump = self.add_code(OpCode::Jump(0));
 
@@ -841,66 +858,75 @@ impl<'a> Compiler<'a> {
         self.finish_jump(jump);
     }
 
-    fn string(&mut self, _: bool) {
+    fn string(&mut self) {
         let string = Value::String(self.prev().literal.clone());
         self.add_code(OpCode::String(string));
     }
 
-    fn int(&mut self, _: bool) {
+    fn int(&mut self) {
         let int = Value::Int(self.prev().literal.parse::<isize>().unwrap());
         self.add_code(OpCode::IntLiteral(int));
     }
 
-    fn float(&mut self, _: bool) {
+    fn float(&mut self) {
         let float = Value::Float64(self.prev().literal.parse::<f64>().unwrap());
         self.add_code(OpCode::FloatLiteral(float));
     }
 
-    fn var(&mut self, assign: bool) {
-        self.named_var(assign);
+    fn var(&mut self) {
+        self.named_var();
+    }
+
+    fn stmt_assign(&mut self) {
+        self.expr_assign();
+        self.consume(Token::Semicolon);
+    }
+
+    fn expr_assign(&mut self) {
+        let name = self.parse_var().to_string();
+        let resolved = self.scope.resolve(&name);
+
+        self.consume(Token::Equal);
+        self.expr();
+        let code = if let Some((i, mutable)) = resolved {
+            if mutable {
+                OpCode::SetLocal(i)
+            } else {
+                self.err("Trying to assign to a const".to_string());
+                return;
+            }
+        } else {
+            OpCode::SetGlobal(name)
+        };
+
+        self.add_code(code);
+        self.add_code(OpCode::Pop);
     }
 
     // FIXME: refactor the logic
-    fn named_var(&mut self, assign: bool) {
+    fn named_var(&mut self) {
         let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
 
-        if assign && self.consume_if(Token::Equal) {
-            self.expr();
-
-            let code = if let Some((i, mutable)) = resolved {
-                if mutable {
-                    OpCode::SetLocal(i)
-                } else {
-                    self.err("Trying to assign to a const".to_string());
-                    return;
-                }
-            } else {
-                OpCode::SetGlobal(name)
-            };
-
-            self.add_code(code)
-        } else {
-            let code = if let Some((i, _)) = resolved {
-                if self.scope.vars[i].depth == -1 {
-                    OpCode::GetGlobal(name)
-                } else {
-                    OpCode::GetLocal(i)
-                }
-            } else {
+        let code = if let Some((i, _)) = resolved {
+            if self.scope.vars[i].depth == -1 {
                 OpCode::GetGlobal(name)
-            };
-
-            self.add_code(code)
+            } else {
+                OpCode::GetLocal(i)
+            }
+        } else {
+            OpCode::GetGlobal(name)
         };
+
+        self.add_code(code);
     }
 
-    fn group(&mut self, _: bool) {
+    fn group(&mut self) {
         self.expr();
         self.consume(Token::RightParen);
     }
 
-    fn unary(&mut self, _: bool) {
+    fn unary(&mut self) {
         let operator = self.prev().token;
         self.parse_precedence(Precedence::Unary);
 
@@ -924,8 +950,7 @@ impl<'a> Compiler<'a> {
             return;
         }
 
-        let can_assign = prec <= Precedence::Assignment;
-        prefix.unwrap()(self, can_assign);
+        prefix.unwrap()(self);
 
         while prec <= self.rule(&self.current().token).2 {
             self.advance();
@@ -935,7 +960,7 @@ impl<'a> Compiler<'a> {
                 return;
             }
 
-            inflix.unwrap()(self, can_assign);
+            inflix.unwrap()(self);
         }
     }
 
@@ -960,7 +985,7 @@ impl<'a> Compiler<'a> {
         argc
     }
 
-    fn binary(&mut self, _assign: bool) {
+    fn binary(&mut self) {
         let operator = self.prev().token;
         let precedence = self.rule(&operator).2;
 
@@ -986,7 +1011,7 @@ impl<'a> Compiler<'a> {
         self.add_code(code);
     }
 
-    fn literal(&mut self, _: bool) {
+    fn literal(&mut self) {
         let code = match self.prev().token {
             Token::True => OpCode::Bool(Value::Bool(true)),
             Token::False => OpCode::Bool(Value::Bool(false)),
@@ -998,7 +1023,7 @@ impl<'a> Compiler<'a> {
         self.add_code(code);
     }
 
-    fn call(&mut self, _: bool) {
+    fn call(&mut self) {
         let args = self.parse_args();
         self.add_code(OpCode::Call(args));
     }
@@ -1051,7 +1076,6 @@ impl<'a> Compiler<'a> {
 #[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
 enum Precedence {
     None = 0,
-    Assignment,
     Or,
     And,
     Equality,
@@ -1066,8 +1090,7 @@ enum Precedence {
 impl Precedence {
     fn next(&self) -> Self {
         match self {
-            Self::None => Self::Assignment,
-            Self::Assignment => Self::Or,
+            Self::None => Self::Or,
             Self::Or => Self::And,
             Self::And => Self::Equality,
             Self::Equality => Self::Comparison,
