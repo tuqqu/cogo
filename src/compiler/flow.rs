@@ -100,3 +100,33 @@ impl ControlFlow {
         self.switch_depth != 0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_control_flow() {
+        let mut cf = ControlFlow::new();
+        assert!(!cf.is_breakable());
+        assert!(!cf.is_continuable());
+        assert!(!cf.is_fallthroughable());
+
+        cf.enter_switch();
+        assert!(cf.is_breakable());
+        assert!(!cf.is_continuable());
+        assert!(cf.is_fallthroughable());
+
+        cf.enter_loop();
+        assert!(cf.is_breakable());
+        assert!(cf.is_continuable());
+        assert!(cf.is_fallthroughable());
+
+        cf.leave_loop();
+        cf.leave_switch();
+        cf.enter_loop();
+        assert!(cf.is_breakable());
+        assert!(cf.is_continuable());
+        assert!(!cf.is_fallthroughable());
+    }
+}
