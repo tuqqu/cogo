@@ -411,21 +411,6 @@ impl<'a> Compiler<'a> {
         self.end_scope();
     }
 
-    const ASSIGN_OPERATORS: [Token; 12] = [
-        Token::PlusEqual,
-        Token::MinusEqual,
-        Token::AsteriskEqual,
-        Token::SlashEqual,
-        Token::ModulusEqual,
-        Token::ModulusEqual,
-        Token::BitwiseAndEqual,
-        Token::BitwiseOrEqual,
-        Token::BitwiseXorEqual,
-        Token::BitClearEqual,
-        Token::LeftShiftEqual,
-        Token::RightShiftEqual,
-    ];
-
     /// Simple expression or an empty expression with a semicolon
     fn stmt_simple(&mut self) {
         self.expr_simple();
@@ -437,8 +422,10 @@ impl<'a> Compiler<'a> {
             self.expr_decl_short_var();
         } else if self.check(Token::Identifier) && self.check_next(Token::Equal) {
             self.expr_assign();
-        } else if self.check(Token::Identifier) && self.check_next_in(&Self::ASSIGN_OPERATORS) {
+        } else if self.check(Token::Identifier) && self.check_next_in(&ASSIGN_OPERATORS) {
             self.expr_compound_assign();
+        } else if self.check(Token::Identifier) && self.check_next_in(&INC_OPERATORS) {
+            self.expr_inc();
         } else {
             self.expr_expr();
         };
@@ -873,13 +860,13 @@ impl<'a> Compiler<'a> {
         let resolved = self.scope.resolve(&name);
         let (get_code, set_code) = if let Some((i, mutable)) = resolved {
             if mutable {
-                (OpCode::SetLocal(i), OpCode::GetLocal(i))
+                (OpCode::GetLocal(i), OpCode::SetLocal(i))
             } else {
                 self.err("Trying to assign to a const".to_string());
                 return;
             }
         } else {
-            (OpCode::SetGlobal(name.clone()), OpCode::GetGlobal(name))
+            (OpCode::GetGlobal(name.clone()), OpCode::SetGlobal(name))
         };
         self.add_code(get_code);
 
@@ -898,6 +885,36 @@ impl<'a> Compiler<'a> {
         };
 
         self.expr();
+        self.add_code(code);
+        self.add_code(set_code);
+        self.add_code(OpCode::Pop);
+    }
+
+    fn expr_inc(&mut self) {
+        let name = self.parse_var().to_string();
+        let resolved = self.scope.resolve(&name);
+        let (get_code, set_code) = if let Some((i, mutable)) = resolved {
+            if mutable {
+                (OpCode::GetLocal(i), OpCode::SetLocal(i))
+            } else {
+                self.err("Trying to assign to a const".to_string());
+                return;
+            }
+        } else {
+            (OpCode::GetGlobal(name.clone()), OpCode::SetGlobal(name))
+        };
+
+        self.add_code(get_code);
+        self.advance();
+        let code = match self.prev().token {
+            Token::Inc => OpCode::Add,
+            Token::Dec => OpCode::Subtract,
+            _ => {
+                return;
+            }
+        };
+
+        self.add_code(OpCode::IntLiteral(Value::Int(1)));
         self.add_code(code);
         self.add_code(set_code);
         self.add_code(OpCode::Pop);
@@ -1163,3 +1180,20 @@ impl EntryPoint {
         funit.ret_type.is_none() && funit.params.is_empty()
     }
 }
+
+const ASSIGN_OPERATORS: [Token; 12] = [
+    Token::PlusEqual,
+    Token::MinusEqual,
+    Token::AsteriskEqual,
+    Token::SlashEqual,
+    Token::ModulusEqual,
+    Token::ModulusEqual,
+    Token::BitwiseAndEqual,
+    Token::BitwiseOrEqual,
+    Token::BitwiseXorEqual,
+    Token::BitClearEqual,
+    Token::LeftShiftEqual,
+    Token::RightShiftEqual,
+];
+
+const INC_OPERATORS: [Token; 2] = [Token::Inc, Token::Dec];

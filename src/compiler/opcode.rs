@@ -50,12 +50,14 @@ pub enum OpCode {
 
     Bool(Value),
     Int(Value),
-    IntLiteral(Value),
     Float(Value),
-    FloatLiteral(Value),
     String(Value),
     Func(CompilationUnit),
     Nil,
+
+    // FIXME remove Value from here
+    IntLiteral(Value),
+    FloatLiteral(Value),
 
     VarGlobal(String, Option<ValType>),
     ConstGlobal(String, Option<ValType>),
