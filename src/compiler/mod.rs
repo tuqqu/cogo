@@ -140,11 +140,6 @@ impl<'a> Compiler<'a> {
         self.consume(Token::Semicolon);
     }
 
-    fn stmt_decl_short_var(&mut self) {
-        self.expr_decl_short_var();
-        self.consume(Token::Semicolon);
-    }
-
     fn expr_decl_short_var(&mut self) {
         let name = self.parse_var().to_string();
         self.consume(Token::ColonEqual);
@@ -351,6 +346,10 @@ impl<'a> Compiler<'a> {
         self.next().token == tok
     }
 
+    fn check_next_in(&mut self, toks: &[Token]) -> bool {
+        toks.contains(&self.next().token)
+    }
+
     fn advance(&mut self) {
         self.current += 1;
     }
@@ -412,14 +411,37 @@ impl<'a> Compiler<'a> {
         self.end_scope();
     }
 
+    const ASSIGN_OPERATORS: [Token; 12] = [
+        Token::PlusEqual,
+        Token::MinusEqual,
+        Token::AsteriskEqual,
+        Token::SlashEqual,
+        Token::ModulusEqual,
+        Token::ModulusEqual,
+        Token::BitwiseAndEqual,
+        Token::BitwiseOrEqual,
+        Token::BitwiseXorEqual,
+        Token::BitClearEqual,
+        Token::LeftShiftEqual,
+        Token::RightShiftEqual,
+    ];
+
+    /// Simple expression or an empty expression with a semicolon
     fn stmt_simple(&mut self) {
+        self.expr_simple();
+        self.consume(Token::Semicolon);
+    }
+
+    fn expr_simple(&mut self) {
         if self.check(Token::Identifier) && self.check_next(Token::ColonEqual) {
-            self.stmt_decl_short_var();
+            self.expr_decl_short_var();
         } else if self.check(Token::Identifier) && self.check_next(Token::Equal) {
-            self.stmt_assign();
+            self.expr_assign();
+        } else if self.check(Token::Identifier) && self.check_next_in(&Self::ASSIGN_OPERATORS) {
+            self.expr_compound_assign();
         } else {
-            self.stmt_expr();
-        }
+            self.expr_expr();
+        };
     }
 
     fn stmt_continue(&mut self) {
@@ -521,14 +543,9 @@ impl<'a> Compiler<'a> {
         self.consume(Token::RightCurlyBrace);
     }
 
-    fn stmt_expr(&mut self) {
-        if !self.check(Token::Semicolon) {
-            self.expr();
-            self.consume(Token::Semicolon);
-            self.add_code(OpCode::Pop);
-        } else {
-            self.stmt_empty();
-        }
+    fn expr_expr(&mut self) {
+        self.expr();
+        self.add_code(OpCode::Pop);
     }
 
     fn last_op_code_index(&self) -> usize {
@@ -622,10 +639,6 @@ impl<'a> Compiler<'a> {
         self.advance();
 
         val_type
-    }
-
-    fn stmt_empty(&mut self) {
-        self.consume(Token::Semicolon);
     }
 
     fn stmt_switch(&mut self) {
@@ -731,30 +744,16 @@ impl<'a> Compiler<'a> {
             (false, jump)
         } else {
             let jump = self.last_op_code_index();
-
-            let short_decl = if self.check(Token::Identifier) && self.check_next(Token::ColonEqual)
-            {
-                self.expr_decl_short_var();
-                true
-            } else if self.check(Token::Identifier) && self.check_next(Token::Equal) {
-                self.expr_assign();
-                true
-            } else {
-                self.expr();
-                false
-            };
+            self.expr_simple();
 
             if self.check(Token::Semicolon) {
                 // for expr; expr; expr {}
                 self.consume(Token::Semicolon);
-                if !short_decl {
-                    self.add_code(OpCode::Pop);
-                }
-
                 let jump = self.last_op_code_index();
                 (true, jump)
             } else {
                 // for expr {}
+                self.pop_code(OpCode::Pop);
                 (false, jump)
             }
         };
@@ -777,15 +776,7 @@ impl<'a> Compiler<'a> {
 
             self.control_flow.add_continue(exit_jump);
 
-            if self.check(Token::Identifier) && self.check_next(Token::ColonEqual) {
-                self.expr_decl_short_var();
-            } else if self.check(Token::Identifier) && self.check_next(Token::Equal) {
-                self.expr_assign();
-            } else {
-                self.expr();
-                self.add_code(OpCode::Pop);
-            };
-
+            self.expr_simple();
             self.add_code(OpCode::BackJump(self.code_len() - exit_jump));
             exit_jump = inc_begin;
 
@@ -877,9 +868,39 @@ impl<'a> Compiler<'a> {
         self.named_var();
     }
 
-    fn stmt_assign(&mut self) {
-        self.expr_assign();
-        self.consume(Token::Semicolon);
+    fn expr_compound_assign(&mut self) {
+        let name = self.parse_var().to_string();
+        let resolved = self.scope.resolve(&name);
+        let (get_code, set_code) = if let Some((i, mutable)) = resolved {
+            if mutable {
+                (OpCode::SetLocal(i), OpCode::GetLocal(i))
+            } else {
+                self.err("Trying to assign to a const".to_string());
+                return;
+            }
+        } else {
+            (OpCode::SetGlobal(name.clone()), OpCode::GetGlobal(name))
+        };
+        self.add_code(get_code);
+
+        self.advance();
+        let operator = self.prev().token;
+        //FIXME add bitwise
+        let code = match operator {
+            Token::PlusEqual => OpCode::Add,
+            Token::MinusEqual => OpCode::Subtract,
+            Token::AsteriskEqual => OpCode::Multiply,
+            Token::SlashEqual => OpCode::Divide,
+            Token::ModulusEqual => OpCode::Remainder,
+            _ => {
+                return;
+            }
+        };
+
+        self.expr();
+        self.add_code(code);
+        self.add_code(set_code);
+        self.add_code(OpCode::Pop);
     }
 
     fn expr_assign(&mut self) {
@@ -991,6 +1012,7 @@ impl<'a> Compiler<'a> {
 
         self.parse_precedence(precedence.next());
 
+        // FIXME add bitwise
         let code = match operator {
             Token::Plus => OpCode::Add,
             Token::Minus => OpCode::Subtract,
@@ -1036,6 +1058,15 @@ impl<'a> Compiler<'a> {
         };
 
         self.cunit.chunk_mut().write(code, pos)
+    }
+
+    /// Remove last OpCode if it matches.
+    /// Panic otherwise to prevent possible errors
+    fn pop_code(&mut self, code: OpCode) {
+        let popped = self.cunit.chunk_mut().pop().unwrap();
+        if mem::discriminant(&popped) != mem::discriminant(&code) {
+            panic!("Wrong op code popped from a chunk");
+        }
     }
 
     fn add_entry_point(&mut self) {

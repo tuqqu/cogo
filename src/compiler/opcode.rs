@@ -105,6 +105,11 @@ impl Chunk {
         }
     }
 
+    pub(crate) fn pop(&mut self) -> Option<OpCode> {
+        self.pos.pop();
+        self.codes.pop()
+    }
+
     pub(crate) fn codes(&self) -> &[OpCode] {
         &self.codes
     }
