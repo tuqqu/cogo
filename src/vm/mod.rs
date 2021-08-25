@@ -3,14 +3,16 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::result;
 
+use self::builtin::FuncBuiltin;
 use self::error::VmError;
 use self::io::{StdStreamProvider, StreamProvider};
 use self::name_table::NameTable;
 use self::stack::VmStack;
 use crate::compiler::unit::{CompilationUnit as CUnit, FuncUnit};
-use crate::compiler::value::Value;
-use crate::compiler::OpCode;
+use crate::compiler::{OpCode, Value};
+use crate::vm::builtin::{builtin_print, builtin_println, define_builtin};
 
+mod builtin;
 mod error;
 pub mod io;
 mod name_table;
@@ -26,6 +28,7 @@ type VmRuntimeCall = std::result::Result<(), VmError>;
 pub struct Vm {
     globals: HashMap<String, VmNamedValue>,
     names: NameTable<FuncUnit>,
+    builtins: NameTable<FuncBuiltin>,
     std_streams: Box<dyn StreamProvider>,
     stack: VmStack<Value>,
     frames: VmStack<Rc<RefCell<CUnitFrame>>>,
@@ -37,9 +40,20 @@ impl Vm {
         let mut frames = VmStack::new();
         frames.push(Rc::new(RefCell::new(entry_frame)));
 
+        let mut builtins = NameTable::new();
+        define_builtin(
+            &mut builtins,
+            FuncBuiltin::new("print".to_string(), builtin_print),
+        );
+        define_builtin(
+            &mut builtins,
+            FuncBuiltin::new("println".to_string(), builtin_println),
+        );
+
         Self {
             globals: HashMap::new(),
             names: NameTable::new(),
+            builtins,
             stack: VmStack::new(),
             frames,
             current_frame: 0,
@@ -231,6 +245,9 @@ impl Vm {
                             VmNamedValue::Const(val) => val,
                         };
                         self.stack.push(val.clone());
+                    } else if let Ok(builtin) = self.builtins.get(&name) {
+                        let val = Value::FuncBuiltin(builtin.name().to_string());
+                        self.stack.push(val);
                     } else {
                         return Err(VmError::Compile(format!("Undefined \"{}\".", name)));
                         //FIXME: err msg
@@ -294,11 +311,23 @@ impl Vm {
                 }
                 OpCode::Call(argc) => {
                     let val = self.stack.retrieve_by(argc as usize).clone();
-                    self.call(&val, argc)?;
-
-                    self.current_frame_mut().inc_pointer(1);
-                    self.current_frame += 1;
-                    continue;
+                    match val {
+                        Value::Func(name) => {
+                            self.call_func(&name, argc)?;
+                            self.current_frame_mut().inc_pointer(1);
+                            self.current_frame += 1;
+                            continue;
+                        }
+                        Value::FuncBuiltin(name) => {
+                            self.call_builtin(&name, argc)?;
+                        }
+                        _ => {
+                            return Err(VmError::Runtime(format!(
+                                "Trying to call a non-callable value {:?}",
+                                val
+                            )))
+                        } //FIXME display
+                    }
                 }
                 OpCode::ValidateType(val_type) => {
                     let val = self.stack.retrieve();
@@ -419,30 +448,38 @@ impl Vm {
         VmResult::Ok(())
     }
 
-    fn call(&mut self, val: &Value, argc: u8) -> VmRuntimeCall {
-        match val {
-            Value::Func(name) => {
-                let f = self.names.get(name)?;
-
-                if argc as usize != f.params.len() {
-                    return Err(VmError::Runtime(format!(
-                        "Expected {} params, got {}",
-                        f.params.len(),
-                        argc
-                    ))); //FIXME display
-                }
-
-                let mut frame = CUnitFrame::new(CUnit::Function(f.clone()));
-                frame.stack_pos = self.stack.len() - argc as usize;
-                self.frames.push(Rc::new(RefCell::new(frame)));
-
-                Ok(())
-            }
-            _ => Err(VmError::Runtime(format!(
-                "Trying to call a non-callable value {:?}",
-                val
-            ))), //FIXME display
+    fn call_func(&mut self, name: &str, argc: u8) -> VmRuntimeCall {
+        let f = self.names.get(name)?;
+        if argc as usize != f.params.len() {
+            return Err(VmError::Runtime(format!(
+                "Expected {} params, got {}",
+                f.params.len(),
+                argc
+            ))); //FIXME display
         }
+
+        let mut frame = CUnitFrame::new(CUnit::Function(f.clone()));
+        frame.stack_pos = self.stack.len() - argc as usize;
+        self.frames.push(Rc::new(RefCell::new(frame)));
+
+        Ok(())
+    }
+
+    fn call_builtin(&mut self, name: &str, argc: u8) -> VmRuntimeCall {
+        let f = self.builtins.get(name)?;
+        let len = self.stack.len();
+        let stack_pos = len - argc as usize;
+
+        let res = f.call(self.stack.slice_mut(stack_pos, len));
+        for _ in 1..=argc {
+            self.stack.pop()?;
+        }
+
+        if let Some(val) = res {
+            self.stack.push(val);
+        }
+
+        Ok(())
     }
 
     fn current_frame(&self) -> Ref<CUnitFrame> {

@@ -2,7 +2,7 @@ use std::io;
 
 use super::name_table::NameError;
 use super::stack::StackUnderflow;
-use crate::compiler::value::TypeError;
+use crate::compiler::TypeError;
 
 #[derive(Debug)]
 pub enum VmError {

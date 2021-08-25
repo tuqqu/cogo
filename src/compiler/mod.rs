@@ -3,7 +3,7 @@ use std::mem;
 use self::flow::ControlFlow;
 pub(crate) use self::opcode::OpCode;
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit, Param};
-use self::value::{ValType, Value};
+pub(crate) use self::value::{TypeError, ValType, Value};
 use crate::compiler::scope::Scope;
 use crate::lex::lexeme::{Lexeme, Pos, Token};
 use crate::lex::Lexer;
@@ -13,7 +13,7 @@ mod flow;
 mod opcode;
 mod scope;
 pub(crate) mod unit;
-pub(crate) mod value;
+mod value;
 
 pub fn compile(src: String) -> CUnitFrame {
     let mut lexer = Lexer::new(src);

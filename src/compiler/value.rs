@@ -28,6 +28,7 @@ pub enum Value {
 
     String(String),
     Func(String),
+    FuncBuiltin(String),
 }
 
 pub struct TypeError(pub String); //FIXME: add proper error struct
@@ -464,6 +465,37 @@ impl Value {
 
     pub fn same_type(&self, other: &Self) -> bool {
         mem::discriminant(self) == mem::discriminant(other)
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let val = match self {
+            Self::Bool(b) => b.to_string(),
+            Self::Int8(i) => i.to_string(),
+            Self::Int16(i) => i.to_string(),
+            Self::Int32(i) => i.to_string(),
+            Self::Int64(i) => i.to_string(),
+            Self::Int(i) => i.to_string(),
+            Self::Uint8(i) => i.to_string(),
+            Self::Uint16(i) => i.to_string(),
+            Self::Uint32(i) => i.to_string(),
+            Self::Uint64(i) => i.to_string(),
+            Self::Uint(i) => i.to_string(),
+            Self::Uintptr(i) => i.to_string(),
+            Self::Float32(f) => f.to_string(),
+            Self::Float64(f) => f.to_string(),
+            Self::Complex64(c, i) => format!("({}+{}i)", c, i),
+            Self::Complex128(c, i) => format!("({}+{}i)", c, i),
+            Self::String(s) => s.clone(),
+            //FIXME add function tostring (via internal id)
+            t => {
+                dbg!(t);
+                panic!("Unknown type")
+            }
+        };
+
+        write!(f, "{}", val)
     }
 }
 

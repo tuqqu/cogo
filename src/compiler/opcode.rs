@@ -1,7 +1,7 @@
 use std::fmt;
 
 use super::unit::CompilationUnit;
-use super::value::{ValType, Value};
+use super::{ValType, Value};
 use crate::lex::lexeme::Pos;
 
 #[derive(Debug, Clone)]

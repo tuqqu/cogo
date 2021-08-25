@@ -12,9 +12,7 @@ use std::result;
 // }
 
 #[derive(Debug)]
-pub(super) struct NameTable<N> {
-    funcs: HashMap<String, N>,
-}
+pub(super) struct NameTable<N>(HashMap<String, N>);
 
 pub(super) struct NameError(pub(crate) String);
 
@@ -22,25 +20,23 @@ type NameResult<T> = result::Result<T, NameError>;
 
 impl<N> NameTable<N> {
     pub(super) fn new() -> Self {
-        Self {
-            funcs: HashMap::new(),
-        }
+        Self(HashMap::new())
     }
 
-    pub(super) fn insert(&mut self, name: String, func: N) -> NameResult<()> {
-        if self.funcs.contains_key(&name) {
+    pub(super) fn insert(&mut self, name: String, value: N) -> NameResult<()> {
+        if self.0.contains_key(&name) {
             return Err(NameError(format!("Name {} already exists", name)));
         }
 
-        self.funcs.insert(name, func);
+        self.0.insert(name, value);
 
         Ok(())
     }
 
     pub(super) fn get(&mut self, name: &str) -> NameResult<&N> {
-        let func = self.funcs.get(name);
-        if let Some(func) = func {
-            Ok(func)
+        let value = self.0.get(name);
+        if let Some(value) = value {
+            Ok(value)
         } else {
             Err(NameError(format!("No name {} exists", name)))
         }

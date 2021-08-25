@@ -1,5 +1,5 @@
 use super::opcode::Chunk;
-use super::value::ValType;
+use super::ValType;
 
 #[derive(Clone, Debug)]
 pub enum CompilationUnit {
