@@ -46,7 +46,6 @@ pub enum OpCode {
     Fallthrough,
     Continue,
     Return(bool),
-    Exit,
 
     Bool(Value),
     Int(Value),

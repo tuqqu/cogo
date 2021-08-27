@@ -460,7 +460,10 @@ impl Value {
     }
 
     pub fn is_of_type(&self, v_type: &ValType) -> bool {
-        self.get_type() == *v_type
+        match &self {
+            Self::Func(_) => true,
+            _ => self.get_type() == *v_type,
+        }
     }
 
     pub fn same_type(&self, other: &Self) -> bool {
@@ -518,7 +521,7 @@ pub enum ValType {
     Complex64,
     Complex128,
     String,
-    Func(FuncType),
+    Func(Box<FuncType>),
     Struct(String),
 }
 
@@ -578,33 +581,41 @@ impl Display for ValType {
 #[derive(Debug, Clone)]
 pub struct FuncType {
     args: Vec<ValType>, //FIXME consider a slice here
-    ret: Box<ValType>,
+    ret_type: Option<ValType>,
 }
 
 impl FuncType {
-    pub fn new(args: Vec<ValType>, ret: ValType) -> Self {
-        Self {
-            args,
-            ret: Box::new(ret),
-        }
+    pub fn new(args: Vec<ValType>, ret_type: Option<ValType>) -> Self {
+        Self { args, ret_type }
     }
 
     fn name(&self) -> String {
         format!(
-            "{}({}) {}",
+            "{}({}){}",
             ValType::TYPE_FUNC,
             self.args
                 .iter()
                 .map(|vt| vt.to_string())
                 .collect::<Vec<String>>()
                 .join(", "),
-            self.ret.name()
+            if let Some(ret_type) = &self.ret_type {
+                format!(" {}", ret_type.name())
+            } else {
+                "".to_string()
+            }
         )
+    }
+
+    pub fn args(&self) -> &[ValType] {
+        &self.args
+    }
+    pub fn ret_type(&self) -> &Option<ValType> {
+        &self.ret_type
     }
 }
 
 impl PartialEq for FuncType {
     fn eq(&self, other: &Self) -> bool {
-        self.args == other.args && self.ret == other.ret
+        self.args == other.args && self.ret_type == other.ret_type
     }
 }

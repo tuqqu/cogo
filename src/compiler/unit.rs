@@ -1,5 +1,6 @@
 use super::opcode::Chunk;
 use super::ValType;
+use crate::compiler::value::FuncType;
 
 #[derive(Clone, Debug)]
 pub enum CompilationUnit {
@@ -51,46 +52,42 @@ impl Default for PackageUnit {
 
 #[derive(Clone, Debug)]
 pub struct FuncUnit {
-    pub(crate) params: Vec<Param>,
-    pub(crate) ret_type: Option<ValType>,
-    pub(crate) name: String,
+    ftype: FuncType,
+    param_names: Vec<String>,
+    name: String,
     codes: Chunk,
 }
 
 impl FuncUnit {
     pub(super) const MAX_ARGC: u8 = u8::MAX;
 
-    pub(super) fn new(name: Option<String>) -> Self {
-        Self::from_codes(name, Chunk::new())
+    pub(super) fn new(name: Option<String>, ftype: FuncType, param_names: Vec<String>) -> Self {
+        Self::from_codes(name, ftype, param_names, Chunk::new())
     }
 
-    fn from_codes(name: Option<String>, codes: Chunk) -> Self {
+    fn from_codes(
+        name: Option<String>,
+        ftype: FuncType,
+        param_names: Vec<String>,
+        codes: Chunk,
+    ) -> Self {
         Self {
-            params: vec![],
-            ret_type: None,
+            param_names,
+            ftype,
             name: name.unwrap_or_else(|| "".to_string()),
             codes,
         }
     }
-}
 
-#[derive(Clone, Debug)]
-pub struct Param {
-    name: String,
-    v_type: ValType,
-}
-
-impl Param {
-    pub(super) fn new(name: String, v_type: ValType) -> Self {
-        Self { name, v_type }
+    pub(crate) fn ret_type(&self) -> &Option<ValType> {
+        self.ftype.ret_type()
     }
 
-    #[allow(dead_code)]
-    pub fn name(&self) -> &str {
+    pub(crate) fn param_names(&self) -> &[String] {
+        &self.param_names
+    }
+
+    pub(crate) fn name(&self) -> &str {
         &self.name
-    }
-
-    pub fn v_type(&self) -> &ValType {
-        &self.v_type
     }
 }

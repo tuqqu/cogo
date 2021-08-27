@@ -140,8 +140,8 @@ impl Vm {
                 }
                 OpCode::Func(funit) => {
                     if let CUnit::Function(func) = funit {
-                        self.names.insert(func.name.clone(), func.clone())?;
-                        self.stack.push(Value::Func(func.name.clone())); //FIXME clone
+                        self.names.insert(func.name().to_string(), func.clone())?;
+                        self.stack.push(Value::Func(func.name().to_string()));
                     } else {
                         panic!("func expected");
                     }
@@ -447,10 +447,10 @@ impl Vm {
 
     fn call_func(&mut self, name: &str, argc: u8) -> VmRuntimeCall {
         let f = self.names.get(name)?;
-        if argc as usize != f.params.len() {
+        if argc as usize != f.param_names().len() {
             return Err(VmError::Runtime(format!(
                 "Expected {} params, got {}",
-                f.params.len(),
+                f.param_names().len(),
                 argc
             ))); //FIXME display
         }
@@ -501,7 +501,7 @@ impl Vm {
 
     fn return_conforms(&self, val: &Option<Value>) -> bool {
         match &self.current_frame().cunit {
-            CUnit::Function(funit) => match (&funit.ret_type, val) {
+            CUnit::Function(funit) => match (funit.ret_type(), val) {
                 (Some(v_type), Some(val)) => val.is_of_type(v_type),
                 (None, None) => true,
                 _ => false,

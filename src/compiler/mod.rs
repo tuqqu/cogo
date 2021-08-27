@@ -3,10 +3,11 @@ use std::mem;
 pub use self::error::{ErrorHandler, ToStderrErrorHandler};
 use self::flow::ControlFlow;
 pub(crate) use self::opcode::OpCode;
-use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit, Param};
+use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
 pub(crate) use self::value::{TypeError, ValType, Value};
 use crate::compiler::error::CompileError;
 use crate::compiler::scope::Scope;
+use crate::compiler::value::FuncType;
 use crate::lex::lexeme::{Lexeme, Token};
 use crate::lex::Lexer;
 use crate::vm::CUnitFrame;
@@ -188,35 +189,33 @@ impl<'a> Compiler<'a> {
 
     fn decl_func(&mut self) {
         let name = self.parse_var().to_string();
-        // FIXME check this (no nested needed)
-        // self.decl_scoped_var(name.clone());
-        self.scope.init_last();
-
-        self.func(Some(name.clone()));
-        self.def_var(name, None, false);
+        let ftype = self.func(Some(name.clone()));
+        self.def_var(name, Some(ValType::Func(Box::new(ftype))), false);
     }
 
-    fn func(&mut self, name: Option<String>) {
-        let cunit = CUnit::Function(FuncUnit::new(name));
-        let cunit = mem::replace(&mut self.cunit, cunit);
-
+    fn func(&mut self, name: Option<String>) -> FuncType {
         self.begin_scope();
         self.consume(Token::LeftParen);
 
-        let mut params = Vec::<Param>::new();
+        let mut param_names = Vec::<String>::new();
+        let mut param_types = Vec::<ValType>::new();
+
         if !self.check(Token::RightParen) {
             loop {
-                if params.len() > FuncUnit::MAX_ARGC as usize {
+                if param_names.len() > FuncUnit::MAX_ARGC as usize {
                     self.err("Maximum parameter count reached.".to_string());
                 }
 
                 // FIXME add anon parameter support
                 let param_name = String::from(self.parse_var());
                 let param_type = self.parse_type();
-                params.push(Param::new(param_name.clone(), param_type.clone()));
+
+                param_names.push(param_name.clone());
+                param_types.push(param_type.clone());
 
                 // FIXME those two methods ought to be together, maybe group them?
                 self.decl_scoped_var(param_name.clone());
+                // It neither is a global scope nor validation case, so no codes are added here
                 self.def_var(param_name, Some(param_type), false);
 
                 if !self.consume_if(Token::Comma) {
@@ -225,16 +224,22 @@ impl<'a> Compiler<'a> {
             }
         }
 
+        self.consume(Token::RightParen);
+
+        let ret_type = self.parse_type_optionally(Token::LeftCurlyBrace);
+        let ftype = FuncType::new(param_types.clone(), ret_type);
+
+        // Before this line there ought not to be any OpCode addition to the CUnit in this function
+        let cunit = CUnit::Function(FuncUnit::new(name, ftype.clone(), param_names));
+        let cunit = mem::replace(&mut self.cunit, cunit);
+
         //FIXME rethink param type validation
-        let len = params.len();
+        let len = param_types.len();
         if len >= 1 {
-            for (i, param) in params.iter().enumerate() {
-                self.add_code(OpCode::ValidateTypeAt(param.v_type().clone(), len - i - 1));
+            for (i, param_type) in param_types.iter().enumerate() {
+                self.add_code(OpCode::ValidateTypeAt(param_type.clone(), len - i - 1));
             }
         }
-
-        self.consume(Token::RightParen);
-        let ret_type = self.parse_type_optionally(Token::LeftCurlyBrace);
 
         self.consume(Token::LeftCurlyBrace);
         self.block_body();
@@ -242,9 +247,6 @@ impl<'a> Compiler<'a> {
 
         let mut cunit = mem::replace(&mut self.cunit, cunit);
         if let CUnit::Function(funit) = &mut cunit {
-            funit.params = params;
-            funit.ret_type = ret_type;
-
             match EntryPoint::check_entry_point(self.cur_package.as_ref().unwrap(), funit) {
                 Ok(()) => {}
                 Err(e) => self.err(e.0),
@@ -254,6 +256,8 @@ impl<'a> Compiler<'a> {
         }
 
         self.add_code(OpCode::Func(cunit));
+
+        ftype
     }
 
     fn rule(&self, t: &Token) -> ParseRule<Self> {
@@ -1156,7 +1160,7 @@ impl EntryPoint {
     const FUNC_NAME: &'static str = "main";
 
     fn check_entry_point(pack: &Package, funit: &FuncUnit) -> SignValidationResult {
-        if pack.0 == Self::PACK_NAME && funit.name == Self::FUNC_NAME {
+        if pack.0 == Self::PACK_NAME && funit.name() == Self::FUNC_NAME {
             if Self::validate_signature(funit) {
                 Ok(())
             } else {
@@ -1171,7 +1175,7 @@ impl EntryPoint {
     }
 
     fn validate_signature(funit: &FuncUnit) -> bool {
-        funit.ret_type.is_none() && funit.params.is_empty()
+        funit.ret_type().is_none() && funit.param_names().is_empty()
     }
 }
 
