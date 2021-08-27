@@ -1,8 +1,7 @@
-use std::io::Write;
-use std::{env, fs, io, process};
+use std::{env, fs, process};
 
-use cogo::compiler::compile;
-use cogo::vm::{Vm, VmResult};
+use cogo::compiler::{compile, ToStderrErrorHandler};
+use cogo::vm::Vm;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -20,10 +19,6 @@ fn main() {
         //     print_help();
         //     process::exit(0);
         // }
-        "-r" | "--repl" => {
-            repl();
-            process::exit(0);
-        }
         _ => {
             let contents = fs::read_to_string(&args[1]).unwrap_or_else(|_| {
                 panic!(
@@ -32,47 +27,21 @@ fn main() {
                 )
             });
 
-            let res = interpret(contents);
-            //FIXME
-            if res.is_err() {
-                eprintln!("\x1b[0;35m{:#?}\x1b[0m", res);
-                print_error("Error.");
-                process::exit(1);
+            let frame = compile(contents, &mut ToStderrErrorHandler);
+
+            let mut vm = Vm::new(None, frame);
+            let res = vm.run();
+            match res {
+                Ok(()) => {
+                    process::exit(0);
+                }
+                Err(e) => {
+                    print_error(&e.to_string());
+                    process::exit(1);
+                }
             }
         }
     }
-}
-
-/// Runs REPL mode from stdin.
-fn repl() {
-    loop {
-        print!("> ");
-        io::stdout().flush().unwrap();
-
-        let mut line: String = String::new();
-        io::stdin().read_line(&mut line).unwrap();
-
-        if line == "\n" {
-            break;
-        }
-
-        let res = interpret(line);
-        //FIXME
-        if res.is_err() {
-            eprintln!("\x1b[0;31m{:#?}\x1b[0m", res);
-            print_error("Error.");
-            process::exit(1);
-        }
-    }
-}
-
-fn interpret(src: String) -> VmResult {
-    let frame = compile(src);
-
-    let mut vm = Vm::new(None, frame);
-    vm.run()?;
-
-    Ok(())
 }
 
 fn print_error(msg: &str) {

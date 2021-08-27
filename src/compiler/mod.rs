@@ -1,34 +1,37 @@
 use std::mem;
 
+pub use self::error::{ErrorHandler, ToStderrErrorHandler};
 use self::flow::ControlFlow;
 pub(crate) use self::opcode::OpCode;
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit, Param};
 pub(crate) use self::value::{TypeError, ValType, Value};
+use crate::compiler::error::CompileError;
 use crate::compiler::scope::Scope;
-use crate::lex::lexeme::{Lexeme, Pos, Token};
+use crate::lex::lexeme::{Lexeme, Token};
 use crate::lex::Lexer;
 use crate::vm::CUnitFrame;
 
+pub(crate) mod error;
 mod flow;
 mod opcode;
 mod scope;
 pub(crate) mod unit;
 mod value;
 
-pub fn compile(src: String) -> CUnitFrame {
+pub fn compile(src: String, err_handler: &mut dyn ErrorHandler) -> CUnitFrame {
     let mut lexer = Lexer::new(src);
-    let (lexemes, errors) = lexer.lex(); //FIXME: handle errs
+    let (lexemes, errors) = lexer.lex();
 
     if !errors.is_empty() {
-        for error in errors {
-            eprintln!("\x1b[0;31m{}\x1b[0m", error);
-        }
-        std::process::exit(1);
+        err_handler.on_error(errors);
     }
 
     let mut parser = Compiler::new(lexemes);
-    let mut cunit = parser.compile();
-    cunit.chunk_mut().write(OpCode::Exit, Pos(0, 0));
+    let (cunit, errors) = parser.compile();
+
+    if !errors.is_empty() {
+        err_handler.on_error(errors);
+    }
 
     eprintln!("\x1b[0;34m{:#?}\x1b[0m", cunit.chunk());
 
@@ -39,7 +42,7 @@ struct Compiler<'a> {
     lexemes: &'a [Lexeme],
     current: usize,
     cunit: CUnit,
-    errs: Vec<String>,
+    errs: Vec<Box<dyn std::error::Error>>,
     panic: bool,
     scope: Scope,
     control_flow: ControlFlow,
@@ -67,7 +70,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn compile(&mut self) -> CUnit {
+    fn compile(&mut self) -> (CUnit, &[Box<dyn std::error::Error>]) {
         self.add_code(OpCode::Noop);
         self.decl_package();
 
@@ -76,7 +79,7 @@ impl<'a> Compiler<'a> {
         }
 
         self.add_entry_point();
-        self.cunit.clone()
+        (self.cunit.clone(), &self.errs)
     }
 
     fn decl_package(&mut self) {
@@ -91,7 +94,7 @@ impl<'a> Compiler<'a> {
                 p.set_name(name.clone());
                 self.cur_package = Some(Package(name));
             } else {
-                panic!("Unreachable code"); //FIXME
+                panic!("Compiling did not start with a package");
             }
         } else {
             self.err("Package declaration expected".to_string());
@@ -185,7 +188,7 @@ impl<'a> Compiler<'a> {
 
     fn decl_func(&mut self) {
         let name = self.parse_var().to_string();
-        // FIXME we need this to be solved for inner nested functions
+        // FIXME check this (no nested needed)
         // self.decl_scoped_var(name.clone());
         self.scope.init_last();
 
@@ -304,16 +307,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn prev(&self) -> &Lexeme {
-        if self.current == 0 {
-            // FIXME move to error
-            panic!("No tokens yet consumed.");
-        }
-
         &self.lexemes[self.current - 1]
     }
 
     fn next(&self) -> &Lexeme {
-        // if self.current + 1 <= self.lexemes.len()
         &self.lexemes[self.current + 1]
     }
 
@@ -356,9 +353,8 @@ impl<'a> Compiler<'a> {
 
     fn err(&mut self, msg: String) {
         self.panic = true;
-        //FIXME: consider passing a handler
-        eprintln!("\x1b[0;31m{} Error: {}\x1b[0m", self.current().pos, msg,);
-        self.errs.push(msg);
+        self.errs
+            .push(Box::new(CompileError(msg, self.current().pos)));
     }
 
     fn recover(&mut self) {
@@ -984,7 +980,6 @@ impl<'a> Compiler<'a> {
         self.advance();
         let prefix = self.rule(&self.prev().token).0;
         if prefix.is_none() {
-            //FIXME
             return;
         }
 
@@ -994,7 +989,6 @@ impl<'a> Compiler<'a> {
             self.advance();
             let inflix = self.rule(&self.prev().token).1;
             if inflix.is_none() {
-                //FIXME
                 return;
             }
 
@@ -1154,8 +1148,8 @@ impl Precedence {
 
 struct Package(String);
 struct EntryPoint;
-struct SignError(String);
-type SignValidationResult = std::result::Result<(), SignError>;
+struct SignatureError(String);
+type SignValidationResult = std::result::Result<(), SignatureError>;
 
 impl EntryPoint {
     const PACK_NAME: &'static str = "main";
@@ -1166,7 +1160,7 @@ impl EntryPoint {
             if Self::validate_signature(funit) {
                 Ok(())
             } else {
-                Err(SignError(format!(
+                Err(SignatureError(format!(
                     "Function \"{}\" must not have parameters and a return value",
                     Self::FUNC_NAME,
                 )))

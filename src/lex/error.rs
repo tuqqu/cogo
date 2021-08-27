@@ -3,7 +3,7 @@ use std::{error, fmt};
 use super::lexeme::Pos;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum LexerError {
+pub(crate) enum LexError {
     /// Error when a comment has no closing delimiter.
     UnclosedComment(Pos),
     /// Unknown character when scanning the source.
@@ -12,9 +12,9 @@ pub(crate) enum LexerError {
     UnterminatedString(Pos),
 }
 
-impl error::Error for LexerError {}
+impl error::Error for LexError {}
 
-impl LexerError {
+impl LexError {
     fn msg(&self) -> String {
         match self {
             Self::UnclosedComment(_) => String::from("Unclosed comment"),
@@ -24,7 +24,7 @@ impl LexerError {
     }
 }
 
-impl fmt::Display for LexerError {
+impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnclosedComment(pos)

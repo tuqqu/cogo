@@ -1,4 +1,5 @@
-use std::io;
+use std::fmt::Formatter;
+use std::{fmt, io};
 
 use super::name_table::NameError;
 use super::stack::StackUnderflow;
@@ -31,5 +32,16 @@ impl From<io::Error> for VmError {
 impl From<NameError> for VmError {
     fn from(e: NameError) -> Self {
         Self::Runtime(e.0)
+    }
+}
+
+impl fmt::Display for VmError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let msg = match &self {
+            Self::Compile(s) => s,
+            Self::Runtime(s) => s,
+        };
+
+        write!(f, "{}", msg)
     }
 }

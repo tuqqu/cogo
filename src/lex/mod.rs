@@ -1,4 +1,4 @@
-use self::error::LexerError;
+use self::error::LexError;
 use self::lexeme::{Lexeme, Pos, Token};
 
 mod error;
@@ -11,7 +11,7 @@ pub(crate) struct Lexer {
     current: usize,
     line: usize,
     pos: usize,
-    errors: Vec<LexerError>,
+    errors: Vec<Box<dyn std::error::Error>>,
 }
 
 impl Lexer {
@@ -27,7 +27,7 @@ impl Lexer {
         }
     }
 
-    pub(crate) fn lex(&mut self) -> (&[Lexeme], &[LexerError]) {
+    pub(crate) fn lex(&mut self) -> (&[Lexeme], &[Box<dyn std::error::Error>]) {
         while !self.is_at_end() {
             self.start = self.current;
             self.token();
@@ -179,7 +179,7 @@ impl Lexer {
                         }
 
                         if self.is_at_end() {
-                            self.errors.push(LexerError::UnclosedComment(self.pos()));
+                            self.add_err(LexError::UnclosedComment(self.pos()));
                             return;
                         }
 
@@ -211,8 +211,7 @@ impl Lexer {
                     self.identifier();
                 } else {
                     self.pos += 1;
-                    self.errors
-                        .push(LexerError::UnknownCharacter(self.pos(), c));
+                    self.add_err(LexError::UnknownCharacter(self.pos(), c));
                 }
             }
         };
@@ -276,7 +275,7 @@ impl Lexer {
         }
 
         if self.is_at_end() {
-            self.errors.push(LexerError::UnterminatedString(self.pos()));
+            self.add_err(LexError::UnterminatedString(self.pos()));
             return;
         }
 
@@ -463,6 +462,10 @@ impl Lexer {
             false
         }
     }
+
+    fn add_err(&mut self, err: LexError) {
+        self.errors.push(Box::new(err));
+    }
 }
 
 #[cfg(test)]
@@ -495,7 +498,11 @@ mod tests {
     fn test_err_lex() {
         let mut lexer = Lexer::new(str::to_string("y := \"str"));
         let (lexemes, errs) = lexer.lex();
-        assert_eq!(errs, &[LexerError::UnterminatedString(Pos(1, 6))]);
+        assert_eq!(errs.len(), 1);
+        assert_eq!(
+            errs[0].to_string(),
+            LexError::UnterminatedString(Pos(1, 6)).to_string(),
+        );
         assert_eq!(
             lexemes,
             &[
@@ -507,7 +514,11 @@ mod tests {
 
         let mut lexer = Lexer::new(str::to_string("/* comment"));
         let (lexemes, errs) = lexer.lex();
-        assert_eq!(errs, &[LexerError::UnclosedComment(Pos(1, 1))]);
+        assert_eq!(errs.len(), 1);
+        assert_eq!(
+            errs[0].to_string(),
+            LexError::UnclosedComment(Pos(1, 1)).to_string(),
+        );
         assert_eq!(lexemes, &[Lexeme::new(Token::Eof, Pos(1, 1)),]);
     }
 }

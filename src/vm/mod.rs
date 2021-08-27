@@ -131,9 +131,6 @@ impl Vm {
 
                     continue;
                 }
-                OpCode::Exit => {
-                    return Ok(());
-                }
                 OpCode::Bool(v) | OpCode::Int(v) | OpCode::Float(v) | OpCode::String(v) => {
                     self.stack.push(v.clone()); //FIXME clone
                 }
