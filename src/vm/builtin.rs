@@ -1,20 +1,24 @@
+#[allow(unused_imports)]
+use std::io::Write;
+
 use crate::compiler::Value;
-use crate::vm::name_table::NameTable;
+use crate::vm::io::StreamProvider;
+use crate::vm::Vm;
 
 pub(super) struct FuncBuiltin {
     name: String,
     func: Builtin,
 }
 
-type Builtin = fn(argv: &mut [Value]) -> Option<Value>;
+type Builtin = fn(streams: &dyn StreamProvider, argv: &[Value]) -> Option<Value>;
 
 impl FuncBuiltin {
     pub(super) fn new(name: String, func: Builtin) -> Self {
         Self { name, func }
     }
 
-    pub(super) fn call(&self, argv: &mut [Value]) -> Option<Value> {
-        (self.func)(argv)
+    pub(super) fn call(&self, streams: &dyn StreamProvider, argv: &[Value]) -> Option<Value> {
+        (self.func)(streams, argv)
     }
 
     pub(super) fn name(&self) -> &str {
@@ -22,28 +26,39 @@ impl FuncBuiltin {
     }
 }
 
-pub(super) fn define_builtin(table: &mut NameTable<FuncBuiltin>, func: FuncBuiltin) {
-    table.insert(func.name.clone(), func).unwrap_or(());
+impl Vm {
+    pub(super) fn define_builtins(&mut self) {
+        self.define_builtin(FuncBuiltin::new("print".to_string(), builtin_print));
+        self.define_builtin(FuncBuiltin::new("println".to_string(), builtin_println));
+    }
+
+    fn define_builtin(&mut self, func: FuncBuiltin) {
+        self.builtins.insert(func.name.clone(), func).unwrap_or(());
+    }
 }
 
-pub(super) fn builtin_print(argv: &mut [Value]) -> Option<Value> {
-    eprint!(
+fn builtin_print(streams: &dyn StreamProvider, argv: &[Value]) -> Option<Value> {
+    write!(
+        &mut streams.stream_err(),
         "{}",
         argv.iter()
             .map(|v| v.to_string())
             .collect::<Vec<String>>()
             .join("")
-    );
+    )
+    .unwrap();
     None
 }
 
-pub(super) fn builtin_println(argv: &mut [Value]) -> Option<Value> {
-    eprintln!(
+fn builtin_println(streams: &dyn StreamProvider, argv: &[Value]) -> Option<Value> {
+    writeln!(
+        &mut streams.stream_err(),
         "{}",
         argv.iter()
             .map(|v| v.to_string())
             .collect::<Vec<String>>()
             .join(" ")
-    );
+    )
+    .unwrap();
     None
 }

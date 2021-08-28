@@ -10,7 +10,6 @@ use self::name_table::NameTable;
 use self::stack::VmStack;
 use crate::compiler::unit::{CompilationUnit as CUnit, FuncUnit};
 use crate::compiler::{OpCode, Value};
-use crate::vm::builtin::{builtin_print, builtin_println, define_builtin};
 
 mod builtin;
 mod error;
@@ -40,25 +39,18 @@ impl Vm {
         let mut frames = VmStack::new();
         frames.push(Rc::new(RefCell::new(entry_frame)));
 
-        let mut builtins = NameTable::new();
-        define_builtin(
-            &mut builtins,
-            FuncBuiltin::new("print".to_string(), builtin_print),
-        );
-        define_builtin(
-            &mut builtins,
-            FuncBuiltin::new("println".to_string(), builtin_println),
-        );
-
-        Self {
+        let mut vm = Self {
             globals: HashMap::new(),
             names: NameTable::new(),
-            builtins,
+            builtins: NameTable::new(),
             stack: VmStack::new(),
             frames,
             current_frame: 0,
             std_streams: std_streams.unwrap_or_else(|| Box::new(StdStreamProvider::new(None))),
-        }
+        };
+
+        vm.define_builtins();
+        vm
     }
 
     pub fn run(&mut self) -> VmResult {
@@ -467,7 +459,7 @@ impl Vm {
         let len = self.stack.len();
         let stack_pos = len - argc as usize;
 
-        let res = f.call(self.stack.slice_mut(stack_pos, len));
+        let res = f.call(self.std_streams.as_ref(), self.stack.slice(stack_pos, len));
         for _ in 1..=argc {
             self.stack.pop()?;
         }

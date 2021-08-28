@@ -486,10 +486,10 @@ impl Display for Value {
             Self::Uint64(i) => i.to_string(),
             Self::Uint(i) => i.to_string(),
             Self::Uintptr(i) => i.to_string(),
-            Self::Float32(f) => f.to_string(),
-            Self::Float64(f) => f.to_string(),
-            Self::Complex64(c, i) => format!("({}+{}i)", c, i),
-            Self::Complex128(c, i) => format!("({}+{}i)", c, i),
+            Self::Float32(f) => format!("{:.1}", f),
+            Self::Float64(f) => format!("{:.1}", f),
+            Self::Complex64(c, i) => format!("({:.1}+{:.1}i)", c, i),
+            Self::Complex128(c, i) => format!("({:.1}+{:.1}i)", c, i),
             Self::String(s) => s.clone(),
             //FIXME add function tostring (via internal id)
             t => {
@@ -580,7 +580,7 @@ impl Display for ValType {
 
 #[derive(Debug, Clone)]
 pub struct FuncType {
-    args: Vec<ValType>, //FIXME consider a slice here
+    args: Vec<ValType>,
     ret_type: Option<ValType>,
 }
 

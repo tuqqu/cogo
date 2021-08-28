@@ -27,7 +27,7 @@ fn main() {
                 )
             });
 
-            let frame = compile(contents, &mut ToStderrErrorHandler);
+            let frame = compile(&contents, &mut ToStderrErrorHandler);
 
             let mut vm = Vm::new(None, frame);
             let res = vm.run();

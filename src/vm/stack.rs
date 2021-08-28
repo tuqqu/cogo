@@ -54,7 +54,7 @@ impl<T> VmStack<T> {
         self.stack.len()
     }
 
-    pub(super) fn slice_mut(&mut self, s: usize, e: usize) -> &mut [T] {
+    pub(super) fn slice(&mut self, s: usize, e: usize) -> &[T] {
         &mut self.stack[s..e]
     }
 }

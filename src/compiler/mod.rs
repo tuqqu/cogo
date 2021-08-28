@@ -19,7 +19,7 @@ mod scope;
 pub(crate) mod unit;
 mod value;
 
-pub fn compile(src: String, err_handler: &mut dyn ErrorHandler) -> CUnitFrame {
+pub fn compile(src: &str, err_handler: &mut dyn ErrorHandler) -> CUnitFrame {
     let mut lexer = Lexer::new(src);
     let (lexemes, errors) = lexer.lex();
 
@@ -219,6 +219,10 @@ impl<'a> Compiler<'a> {
                 self.def_var(param_name, Some(param_type), false);
 
                 if !self.consume_if(Token::Comma) {
+                    break;
+                }
+
+                if self.check(Token::RightParen) {
                     break;
                 }
             }
@@ -1011,7 +1015,12 @@ impl<'a> Compiler<'a> {
                 }
 
                 argc += 1;
+
                 if !self.consume_if(Token::Comma) {
+                    break;
+                }
+
+                if self.check(Token::RightParen) {
                     break;
                 }
             }

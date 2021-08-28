@@ -4,8 +4,8 @@ use self::lexeme::{Lexeme, Pos, Token};
 mod error;
 pub(crate) mod lexeme;
 
-pub(crate) struct Lexer {
-    src: String,
+pub(crate) struct Lexer<'a> {
+    src: &'a str,
     lexemes: Vec<Lexeme>,
     start: usize,
     current: usize,
@@ -14,8 +14,8 @@ pub(crate) struct Lexer {
     errors: Vec<Box<dyn std::error::Error>>,
 }
 
-impl Lexer {
-    pub(crate) fn new(src: String) -> Self {
+impl<'a> Lexer<'a> {
+    pub(crate) fn new(src: &'a str) -> Self {
         Self {
             src,
             lexemes: vec![],
@@ -474,7 +474,7 @@ mod tests {
 
     #[test]
     fn test_lex() {
-        let mut lexer = Lexer::new(str::to_string("var x uint64 = 100; y := \"str\""));
+        let mut lexer = Lexer::new("var x uint64 = 100; y := \"str\"");
         let (lexemes, errs) = lexer.lex();
         assert!(errs.is_empty());
         assert_eq!(
@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_err_lex() {
-        let mut lexer = Lexer::new(str::to_string("y := \"str"));
+        let mut lexer = Lexer::new("y := \"str");
         let (lexemes, errs) = lexer.lex();
         assert_eq!(errs.len(), 1);
         assert_eq!(
@@ -512,7 +512,7 @@ mod tests {
             ]
         );
 
-        let mut lexer = Lexer::new(str::to_string("/* comment"));
+        let mut lexer = Lexer::new("/* comment");
         let (lexemes, errs) = lexer.lex();
         assert_eq!(errs.len(), 1);
         assert_eq!(
