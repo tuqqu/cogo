@@ -66,8 +66,9 @@ pub enum OpCode {
     GetLocal(usize),
     SetLocal(usize),
 
-    ValidateType(ValType),
-    ValidateTypeAt(ValType, usize), //FIXME
+    LiteralCast,
+    ValidateTypeWithLiteralCast(ValType),
+    ValidateTypeAtWithLiteralCast(ValType, usize), //FIXME
     PutDefaultValue(ValType),
 }
 

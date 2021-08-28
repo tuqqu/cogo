@@ -22,6 +22,22 @@ enum VmNamedValue {
     Const(Value),
 }
 
+impl VmNamedValue {
+    fn val(&self) -> &Value {
+        match self {
+            Self::Var(v) => v,
+            Self::Const(v) => v,
+        }
+    }
+
+    fn val_mut(&mut self) -> &mut Value {
+        match self {
+            Self::Var(v) => v,
+            Self::Const(v) => v,
+        }
+    }
+}
+
 type VmRuntimeCall = std::result::Result<(), VmError>;
 
 pub struct Vm {
@@ -78,33 +94,39 @@ impl Vm {
                     self.stack.push(a);
                 }
                 OpCode::Negate => {
-                    let a = self.stack.pop()?;
-                    self.stack.push(a.negate()?);
+                    let mut a = self.stack.pop()?;
+                    a.negate()?;
+                    self.stack.push(a);
                 }
                 OpCode::Subtract => {
                     let b = self.stack.pop()?;
-                    let a = self.stack.pop()?;
-                    self.stack.push(a.sub(&b)?);
+                    let mut a = self.stack.pop()?;
+                    a.sub(&b)?;
+                    self.stack.push(a);
                 }
                 OpCode::Add => {
                     let b = self.stack.pop()?;
-                    let a = self.stack.pop()?;
-                    self.stack.push(a.add(&b)?);
+                    let mut a = self.stack.pop()?;
+                    a.add(&b)?;
+                    self.stack.push(a);
                 }
                 OpCode::Multiply => {
                     let b = self.stack.pop()?;
-                    let a = self.stack.pop()?;
-                    self.stack.push(a.mult(&b)?);
+                    let mut a = self.stack.pop()?;
+                    a.mult(&b)?;
+                    self.stack.push(a);
                 }
                 OpCode::Divide => {
                     let b = self.stack.pop()?;
-                    let a = self.stack.pop()?;
-                    self.stack.push(a.div(&b)?);
+                    let mut a = self.stack.pop()?;
+                    a.div(&b)?;
+                    self.stack.push(a);
                 }
                 OpCode::Remainder => {
                     let b = self.stack.pop()?;
-                    let a = self.stack.pop()?;
-                    self.stack.push(a.modulo(&b)?);
+                    let mut a = self.stack.pop()?;
+                    a.modulo(&b)?;
+                    self.stack.push(a);
                 }
                 OpCode::Return(void) => {
                     let val = if !void { Some(self.stack.pop()?) } else { None };
@@ -139,38 +161,46 @@ impl Vm {
                     }
                 }
                 OpCode::Not => {
-                    let a = self.stack.pop()?;
-                    self.stack.push(a.not()?);
+                    let mut a = self.stack.pop()?;
+                    a.not()?;
+                    self.stack.push(a);
                 }
                 OpCode::Equal => {
                     let b = self.stack.pop()?;
                     let a = self.stack.pop()?;
-                    self.stack.push(a.equal(&b)?);
+                    let eq = a.equal(&b)?;
+                    self.stack.push(eq);
                 }
                 OpCode::NotEqual => {
                     let b = self.stack.pop()?;
                     let a = self.stack.pop()?;
-                    self.stack.push(a.equal(&b)?.not()?);
+                    let mut eq = a.equal(&b)?;
+                    eq.not()?;
+                    self.stack.push(eq);
                 }
                 OpCode::Greater => {
                     let b = self.stack.pop()?;
                     let a = self.stack.pop()?;
-                    self.stack.push(a.greater(&b)?);
+                    let g = a.greater(&b)?;
+                    self.stack.push(g);
                 }
                 OpCode::GreaterEqual => {
                     let b = self.stack.pop()?;
                     let a = self.stack.pop()?;
-                    self.stack.push(a.greater_equal(&b)?);
+                    let ge = a.greater_equal(&b)?;
+                    self.stack.push(ge);
                 }
                 OpCode::Less => {
                     let b = self.stack.pop()?;
                     let a = self.stack.pop()?;
-                    self.stack.push(a.less(&b)?);
+                    let l = a.less(&b)?;
+                    self.stack.push(l);
                 }
                 OpCode::LessEqual => {
                     let b = self.stack.pop()?;
                     let a = self.stack.pop()?;
-                    self.stack.push(a.less_equal(&b)?);
+                    let le = a.less_equal(&b)?;
+                    self.stack.push(le);
                 }
                 OpCode::Pop => {
                     self.stack.pop()?;
@@ -182,9 +212,9 @@ impl Vm {
                 }
                 OpCode::VarGlobal(name, val_type) => {
                     let value = self.stack.retrieve(); //FIXME improve message when void function result is used
-
-                    if let Some(val_type) = val_type {
-                        if !value.is_of_type(&val_type) {
+                    let mut value = value.clone();
+                    if let Some(val_type) = &val_type {
+                        if !value.is_of_type(val_type) {
                             return Err(VmError::Compile(format!(
                                 "Got value of type \"{}\" but expected type \"{}\".",
                                 value.get_type().name(),
@@ -193,6 +223,8 @@ impl Vm {
                         }
                     }
 
+                    value.lose_literal(val_type);
+
                     if self.globals.contains_key(&name) {
                         return Err(VmError::Compile(format!(
                             "Name \"{}\" already declared in this block.",
@@ -200,14 +232,14 @@ impl Vm {
                         ))); //FIXME: err msg
                     }
 
-                    self.globals
-                        .insert(name.clone(), VmNamedValue::Var(value.clone()));
+                    self.globals.insert(name.clone(), VmNamedValue::Var(value));
                     self.stack.pop()?;
                 }
                 OpCode::ConstGlobal(name, val_type) => {
                     let value = self.stack.retrieve();
-                    if let Some(val_type) = val_type {
-                        if !value.is_of_type(&val_type) {
+                    let mut value = value.clone();
+                    if let Some(val_type) = &val_type {
+                        if !value.is_of_type(val_type) {
                             return Err(VmError::Compile(format!(
                                 "Got value of type \"{}\" but expected type \"{}\".",
                                 value.get_type().name(),
@@ -215,6 +247,8 @@ impl Vm {
                             ))); //FIXME: err msg
                         }
                     }
+
+                    value.lose_literal(val_type);
 
                     if self.globals.contains_key(&name) {
                         return Err(VmError::Compile(format!(
@@ -224,16 +258,12 @@ impl Vm {
                     }
 
                     self.globals
-                        .insert(name.clone(), VmNamedValue::Const(value.clone()));
+                        .insert(name.clone(), VmNamedValue::Const(value));
                     self.stack.pop()?;
                 }
                 OpCode::GetGlobal(name) => {
-                    if let Some(val) = self.globals.get(&name) {
-                        let val = match val {
-                            VmNamedValue::Var(val) => val,
-                            VmNamedValue::Const(val) => val,
-                        };
-                        self.stack.push(val.clone());
+                    if let Some(nval) = self.globals.get(&name) {
+                        self.stack.push(nval.val().clone());
                     } else if let Ok(builtin) = self.builtins.get(&name) {
                         let val = Value::FuncBuiltin(builtin.name().to_string());
                         self.stack.push(val);
@@ -250,11 +280,9 @@ impl Vm {
                         ))); //FIXME: err msg
                     }
 
-                    let value = self.stack.retrieve();
-                    let old_v = self
-                        .globals
-                        .insert(name.clone(), VmNamedValue::Var(value.clone()))
-                        .unwrap_or_else(|| panic!("Old value of \"{}\" not found.", name));
+                    let value = self.stack.retrieve_mut();
+
+                    let old_v = self.globals.get_mut(&name).unwrap();
 
                     if let VmNamedValue::Const(_) = old_v {
                         return Err(VmError::Compile(format!(
@@ -263,11 +291,7 @@ impl Vm {
                         ))); //FIXME: err msg
                     }
 
-                    let old_v = match old_v {
-                        VmNamedValue::Var(val) => val,
-                        VmNamedValue::Const(val) => val,
-                    };
-
+                    let old_v = old_v.val_mut();
                     // FIXME: maybe we should store types in a sep hashtable?
                     if !old_v.same_type(value) {
                         return Err(VmError::Compile(format!(
@@ -276,17 +300,24 @@ impl Vm {
                             old_v.get_type().name()
                         ))); //FIXME: err msg
                     }
+
+                    value.lose_literal(Some(old_v.get_type()));
+                    *old_v = value.clone();
+
                     // no pop?
                 }
                 OpCode::GetLocal(i) => {
                     let offset = self.current_frame().stack_pos;
-                    let value = self.stack.retrieve_at(i + offset).clone();
+                    let mut value = self.stack.retrieve_at(i + offset).clone();
+                    value.lose_literal(None);
                     self.stack.push(value);
                 }
                 OpCode::SetLocal(i) => {
                     let offset = self.current_frame().stack_pos;
                     let old_v = self.stack.retrieve_at(i + offset).clone();
-                    let value = self.stack.retrieve().clone();
+                    let mut value = self.stack.retrieve().clone();
+
+                    value.lose_literal(Some(old_v.get_type()));
 
                     if !old_v.same_type(&value) {
                         return Err(VmError::Compile(format!(
@@ -318,8 +349,10 @@ impl Vm {
                         } //FIXME display
                     }
                 }
-                OpCode::ValidateType(val_type) => {
-                    let val = self.stack.retrieve();
+                OpCode::ValidateTypeWithLiteralCast(val_type) => {
+                    let val = self.stack.retrieve_mut();
+                    val.lose_literal(Some(val_type.clone()));
+
                     if !val.is_of_type(&val_type) {
                         return Err(VmError::Compile(format!(
                             "Wrong type \"{}\", expected \"{}\".",
@@ -328,8 +361,14 @@ impl Vm {
                         ))); //FIXME: err msg
                     }
                 }
-                OpCode::ValidateTypeAt(val_type, at) => {
-                    let val = self.stack.retrieve_by(at);
+                OpCode::LiteralCast => {
+                    let val = self.stack.retrieve_mut();
+                    val.lose_literal(None);
+                }
+                OpCode::ValidateTypeAtWithLiteralCast(val_type, at) => {
+                    let val = self.stack.retrieve_by_mut(at);
+                    val.lose_literal(Some(val_type.clone()));
+
                     if !val.is_of_type(&val_type) {
                         return Err(VmError::Compile(format!(
                             "Wrong type \"{}\", expected \"{}\".",

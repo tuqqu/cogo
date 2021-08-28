@@ -30,9 +30,19 @@ impl<T> VmStack<T> {
         self.retrieve_at(self.stack.len() - 1)
     }
 
+    pub(super) fn retrieve_mut(&mut self) -> &mut T {
+        self.retrieve_at_mut(self.stack.len() - 1)
+    }
+
     pub(super) fn retrieve_at(&self, i: usize) -> &T {
         self.stack
             .get(i)
+            .expect("Cannot retrieve value from stack.")
+    }
+
+    pub(super) fn retrieve_at_mut(&mut self, i: usize) -> &mut T {
+        self.stack
+            .get_mut(i)
             .expect("Cannot retrieve value from stack.")
     }
 
@@ -40,6 +50,11 @@ impl<T> VmStack<T> {
         self.retrieve_at(self.stack.len() - by - 1)
     }
 
+    pub(super) fn retrieve_by_mut(&mut self, by: usize) -> &mut T {
+        self.retrieve_at_mut(self.stack.len() - by - 1)
+    }
+
+    //FIXME remove
     pub(super) fn last_mut(&mut self) -> &mut T {
         self.stack
             .last_mut()

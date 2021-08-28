@@ -130,15 +130,14 @@ impl<'a> Compiler<'a> {
 
         if self.consume_if(Token::Equal) {
             self.expr();
-
-            self.def_var(name, val_type, true);
+            self.def_var(name, val_type, true, true);
         } else {
             if val_type.is_none() {
                 self.err("Type declaration expected.".to_string());
             }
 
             self.add_code(OpCode::PutDefaultValue(val_type.clone().unwrap()));
-            self.def_var(name, val_type, false);
+            self.def_var(name, val_type, false, true);
         }
 
         self.consume(Token::Semicolon);
@@ -149,18 +148,25 @@ impl<'a> Compiler<'a> {
         self.consume(Token::ColonEqual);
         self.decl_scoped_var(name.clone());
         self.expr();
-        self.def_var(name, None, false);
+        self.def_var(name, None, false, true);
     }
 
-    fn def_var(&mut self, name: String, val_type: Option<ValType>, validate: bool) {
+    //FIXME change flags
+    fn def_var(&mut self, name: String, val_type: Option<ValType>, validate: bool, litcast: bool) {
         if self.is_global_scope() {
             self.add_code(OpCode::VarGlobal(name, val_type));
         } else {
+            //FIXME change logic
             if validate {
                 if let Some(val_type) = val_type {
-                    self.add_code(OpCode::ValidateType(val_type));
+                    self.add_code(OpCode::ValidateTypeWithLiteralCast(val_type));
+                } else if litcast {
+                    self.add_code(OpCode::LiteralCast);
                 }
+            } else if litcast {
+                self.add_code(OpCode::LiteralCast);
             }
+
             self.scope.init_last();
         }
     }
@@ -178,7 +184,9 @@ impl<'a> Compiler<'a> {
             self.add_code(OpCode::ConstGlobal(name, val_type));
         } else {
             if let Some(val_type) = val_type {
-                self.add_code(OpCode::ValidateType(val_type));
+                self.add_code(OpCode::ValidateTypeWithLiteralCast(val_type));
+            } else {
+                self.add_code(OpCode::LiteralCast);
             }
 
             self.scope.init_last();
@@ -190,7 +198,7 @@ impl<'a> Compiler<'a> {
     fn decl_func(&mut self) {
         let name = self.parse_var().to_string();
         let ftype = self.func(Some(name.clone()));
-        self.def_var(name, Some(ValType::Func(Box::new(ftype))), false);
+        self.def_var(name, Some(ValType::Func(Box::new(ftype))), false, false);
     }
 
     fn func(&mut self, name: Option<String>) -> FuncType {
@@ -216,7 +224,7 @@ impl<'a> Compiler<'a> {
                 // FIXME those two methods ought to be together, maybe group them?
                 self.decl_scoped_var(param_name.clone());
                 // It neither is a global scope nor validation case, so no codes are added here
-                self.def_var(param_name, Some(param_type), false);
+                self.def_var(param_name, Some(param_type), false, false);
 
                 if !self.consume_if(Token::Comma) {
                     break;
@@ -241,7 +249,10 @@ impl<'a> Compiler<'a> {
         let len = param_types.len();
         if len >= 1 {
             for (i, param_type) in param_types.iter().enumerate() {
-                self.add_code(OpCode::ValidateTypeAt(param_type.clone(), len - i - 1));
+                self.add_code(OpCode::ValidateTypeAtWithLiteralCast(
+                    param_type.clone(),
+                    len - i - 1,
+                ));
             }
         }
 
@@ -418,7 +429,7 @@ impl<'a> Compiler<'a> {
     /// Simple expression or an empty expression with a semicolon
     fn stmt_simple(&mut self) {
         self.expr_simple();
-        self.consume(Token::Semicolon);
+        self.consume_if(Token::Semicolon); //FIXME fix empty stmt
     }
 
     fn expr_simple(&mut self) {
@@ -846,12 +857,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn int(&mut self) {
-        let int = Value::Int(self.prev().literal.parse::<isize>().unwrap());
+        let int = Value::IntLiteral(self.prev().literal.parse::<isize>().unwrap());
         self.add_code(OpCode::IntLiteral(int));
     }
 
     fn float(&mut self) {
-        let float = Value::Float64(self.prev().literal.parse::<f64>().unwrap());
+        let float = Value::FloatLiteral(self.prev().literal.parse::<f64>().unwrap());
         self.add_code(OpCode::FloatLiteral(float));
     }
 
@@ -918,7 +929,7 @@ impl<'a> Compiler<'a> {
             }
         };
 
-        self.add_code(OpCode::IntLiteral(Value::Int(1)));
+        self.add_code(OpCode::IntLiteral(Value::IntLiteral(1)));
         self.add_code(code);
         self.add_code(set_code);
         self.add_code(OpCode::Pop);
