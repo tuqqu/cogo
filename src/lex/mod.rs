@@ -334,10 +334,12 @@ impl<'a> Lexer<'a> {
         }
 
         let text = self.src_substr(self.start, self.current);
-        let token = self.keyword(&text as &str);
+        let tok = self.keyword(&text as &str);
 
-        if let Some(t) = token {
-            self.add_lexeme(t);
+        if let Some((tok, false)) = tok {
+            self.add_lexeme(tok);
+        } else if let Some((tok, true)) = tok {
+            self.add_lexeme_with_literal(tok, &text);
         } else {
             self.add_lexeme_with_literal(Token::Identifier, &text);
         }
@@ -355,63 +357,63 @@ impl<'a> Lexer<'a> {
         Pos(self.line, self.pos)
     }
 
-    fn keyword(&self, keyword: &str) -> Option<Token> {
+    fn keyword(&self, keyword: &str) -> Option<(Token, bool)> {
         use Token::*;
         let tok = match keyword {
-            "break" => Break,
-            "case" => Case,
-            "chan" => Chan,
-            "const" => Const,
-            "continue" => Continue,
-            "default" => Default,
-            "defer" => Defer,
-            "else" => Else,
-            "fallthrough" => Fallthrough,
-            "for" => For,
-            "func" => Func,
-            "go" => Go,
-            "goto" => Goto,
-            "if" => If,
-            "import" => Import,
-            "interface" => Interface,
-            "map" => Map,
-            "package" => Package,
-            "range" => Range,
-            "return" => Return,
-            "select" => Select,
-            "struct" => Struct,
-            "switch" => Switch,
-            "type" => Type,
-            "var" => Var,
+            "break" => (Break, false),
+            "case" => (Case, false),
+            "chan" => (Chan, false),
+            "const" => (Const, false),
+            "continue" => (Continue, false),
+            "default" => (Default, false),
+            "defer" => (Defer, false),
+            "else" => (Else, false),
+            "fallthrough" => (Fallthrough, false),
+            "for" => (For, false),
+            "func" => (Func, false),
+            "go" => (Go, false),
+            "goto" => (Goto, false),
+            "if" => (If, false),
+            "import" => (Import, false),
+            "interface" => (Interface, false),
+            "map" => (Map, false),
+            "package" => (Package, false),
+            "range" => (Range, false),
+            "return" => (Return, false),
+            "select" => (Select, false),
+            "struct" => (Struct, false),
+            "switch" => (Switch, false),
+            "type" => (Type, false),
+            "var" => (Var, false),
 
-            "nil" => Nil,
+            "nil" => (Nil, false),
 
-            "bool" => Bool,
-            "false" => False,
-            "true" => True,
+            "bool" => (Bool, true),
+            "false" => (False, false),
+            "true" => (True, false),
 
-            "int8" => Int8,
-            "int16" => Int16,
-            "int32" => Int32,
-            "rune" => Rune,
-            "int64" => Int64,
-            "int" => Int,
+            "int8" => (Int8, true),
+            "int16" => (Int16, true),
+            "int32" => (Int32, true),
+            "rune" => (Rune, true),
+            "int64" => (Int64, true),
+            "int" => (Int, true),
 
-            "uint8" => Uint8,
-            "byte" => Byte,
-            "uint16" => Uint16,
-            "uint32" => Uint32,
-            "uint64" => Uint64,
-            "uint" => Uint,
-            "uintptr" => Uintptr,
+            "uint8" => (Uint8, true),
+            "byte" => (Byte, true),
+            "uint16" => (Uint16, true),
+            "uint32" => (Uint32, true),
+            "uint64" => (Uint64, true),
+            "uint" => (Uint, true),
+            "uintptr" => (Uintptr, true),
 
-            "float32" => Float32,
-            "float64" => Float64,
+            "float32" => (Float32, true),
+            "float64" => (Float64, true),
 
-            "complex64" => Complex64,
-            "complex128" => Complex128,
+            "complex64" => (Complex64, false),
+            "complex128" => (Complex128, false),
 
-            "string" => String,
+            "string" => (String, false),
 
             _ => return None,
         };
@@ -482,7 +484,7 @@ mod tests {
             &[
                 Lexeme::new(Token::Var, Pos(1, 1)),
                 Lexeme::new_with_literal(Token::Identifier, Pos(1, 5), String::from("x")),
-                Lexeme::new(Token::Uint64, Pos(1, 7)),
+                Lexeme::new_with_literal(Token::Uint64, Pos(1, 7), String::from("uint64")),
                 Lexeme::new(Token::Equal, Pos(1, 14)),
                 Lexeme::new_with_literal(Token::IntLiteral, Pos(1, 16), String::from("100")),
                 Lexeme::new(Token::Semicolon, Pos(1, 19)),

@@ -1,6 +1,7 @@
-#![allow(dead_code)]
 use std::fmt::{Display, Formatter};
 use std::mem;
+
+use super::ValType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -39,8 +40,8 @@ pub struct TypeError(pub String); //FIXME: add proper error struct
 type OperationResult<T> = Result<T, TypeError>;
 
 impl Value {
-    pub fn default(val_type: &ValType) -> Self {
-        match val_type {
+    pub fn default(vtype: &ValType) -> Self {
+        match vtype {
             ValType::Bool => Self::Bool(false),
             ValType::Int8 => Self::Int8(0),
             ValType::Int16 => Self::Int16(0),
@@ -58,7 +59,7 @@ impl Value {
             ValType::Complex64 => Self::Complex64(0_f32, 0_f32),
             ValType::Complex128 => Self::Complex128(0_f64, 0_f64),
             ValType::String => Self::String(String::from("")),
-            _ => panic!("unknown valtye"), //FIXME: change to separate errors
+            _ => panic!("Cannot construct default value for type {}", vtype),
         }
     }
 
@@ -101,6 +102,284 @@ impl Value {
         }
     }
 
+    pub fn cast_to(&self, vtype: ValType) -> Value {
+        use Value::*;
+        match *self {
+            Int8(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String), //FIXME ass string conversion
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Int16(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Int32(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Int64(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Int(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            IntLiteral(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Uint8(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Uint16(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Uint32(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Uint64(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Uintptr(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Uint(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Float32(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0.0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            Float64(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0.0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            FloatLiteral(v) => match vtype {
+                ValType::Bool => Value::Bool(v != 0.0),
+                ValType::Int8 => Value::Int8(v as i8),
+                ValType::Int16 => Value::Int16(v as i16),
+                ValType::Int32 => Value::Int32(v as i32),
+                ValType::Int64 => Value::Int64(v as i64),
+                ValType::Int => Value::Int(v as isize),
+                ValType::Uint8 => Value::Uint8(v as u8),
+                ValType::Uint16 => Value::Uint16(v as u16),
+                ValType::Uint32 => Value::Uint32(v as u32),
+                ValType::Uint64 => Value::Uint64(v as u64),
+                ValType::Uint => Value::Uint(v as usize),
+                ValType::Uintptr => Value::Uintptr(v as usize),
+                ValType::Float32 => Value::Float32(v as f32),
+                ValType::Float64 => Value::Float64(v as f64),
+                // ValType::String => Value::String(v as String),
+                _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+            },
+            // String(a) => vtype.cast_to(a),
+            _ => panic!("Cannot cast type {} to {}", self.get_type(), vtype),
+        }
+    }
+
     fn is_literal(&self) -> bool {
         matches!(self, Self::IntLiteral(_) | Self::FloatLiteral(_))
     }
@@ -128,39 +407,21 @@ impl Value {
     pub fn negate(&mut self) -> OperationResult<()> {
         use Value::*;
         match self {
-            Int8(a) => {
-                *a = -*a;
-            }
-            Int16(a) => {
-                *a = -*a;
-            }
-            Int32(a) => {
-                *a = -*a;
-            }
-            Int64(a) => {
-                *a = -*a;
-            }
-            Int(a) => {
-                *a = -*a;
-            }
-            IntLiteral(a) => {
-                *a = -*a;
-            }
+            Int8(a) => *a = -*a,
+            Int16(a) => *a = -*a,
+            Int32(a) => *a = -*a,
+            Int64(a) => *a = -*a,
+            Int(a) => *a = -*a,
+            IntLiteral(a) => *a = -*a,
             // Uint8(a) => Uint8(-*a), //FIXME: negate logic for uint
             // Uint16(a) => Uint16(-*a),
             // Uint32(a) => Uint32(-*a),
             // Uint64(a) => Uint64(-*a),
             // Uintptr(a) => Uintptr(-*a),
             // Uint(a) => Uint(-*a),
-            Float32(a) => {
-                *a = -*a;
-            }
-            Float64(a) => {
-                *a = -*a;
-            }
-            FloatLiteral(a) => {
-                *a = -*a;
-            }
+            Float32(a) => *a = -*a,
+            Float64(a) => *a = -*a,
+            FloatLiteral(a) => *a = -*a,
             Complex64(a, a_i) => {
                 *a = -*a;
                 *a_i = -*a_i;
@@ -906,124 +1167,5 @@ impl Display for Value {
         };
 
         write!(f, "{}", val)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ValType {
-    Bool,
-    Int8,
-    Int16,
-    Int32,
-    Int64,
-    Int,
-    Uint8,
-    Uint16,
-    Uint32,
-    Uint64,
-    Uint,
-    Uintptr,
-    Float32,
-    Float64,
-    Complex64,
-    Complex128,
-    String,
-    Func(Box<FuncType>),
-    Struct(String),
-}
-
-impl ValType {
-    // primitives
-    const TYPE_BOOL: &'static str = "bool";
-    const TYPE_INT8: &'static str = "int8";
-    const TYPE_INT16: &'static str = "int16";
-    const TYPE_INT32: &'static str = "int32";
-    const TYPE_INT64: &'static str = "int64";
-    const TYPE_INT: &'static str = "int";
-    const TYPE_UINT8: &'static str = "uint8";
-    const TYPE_UINT16: &'static str = "uint16";
-    const TYPE_UINT32: &'static str = "uint32";
-    const TYPE_UINT64: &'static str = "uint64";
-    const TYPE_UINT: &'static str = "uint";
-    const TYPE_UINTPTR: &'static str = "uintptr";
-    const TYPE_FLOAT32: &'static str = "float32";
-    const TYPE_FLOAT64: &'static str = "float64";
-    const TYPE_COMPLEX64: &'static str = "complex64";
-    const TYPE_COMPLEX128: &'static str = "complex128";
-    const TYPE_STRING: &'static str = "string";
-    // complex types
-    const TYPE_FUNC: &'static str = "func";
-
-    pub fn name(&self) -> String {
-        match self {
-            Self::Bool => str::to_string(Self::TYPE_BOOL),
-            Self::Int8 => str::to_string(Self::TYPE_INT8),
-            Self::Int16 => str::to_string(Self::TYPE_INT16),
-            Self::Int32 => str::to_string(Self::TYPE_INT32),
-            Self::Int64 => str::to_string(Self::TYPE_INT64),
-            Self::Int => str::to_string(Self::TYPE_INT),
-            Self::Uint8 => str::to_string(Self::TYPE_UINT8),
-            Self::Uint16 => str::to_string(Self::TYPE_UINT16),
-            Self::Uint32 => str::to_string(Self::TYPE_UINT32),
-            Self::Uint64 => str::to_string(Self::TYPE_UINT64),
-            Self::Uint => str::to_string(Self::TYPE_UINT),
-            Self::Uintptr => str::to_string(Self::TYPE_UINTPTR),
-            Self::Float32 => str::to_string(Self::TYPE_FLOAT32),
-            Self::Float64 => str::to_string(Self::TYPE_FLOAT64),
-            Self::Complex64 => str::to_string(Self::TYPE_COMPLEX64),
-            Self::Complex128 => str::to_string(Self::TYPE_COMPLEX128),
-            Self::String => str::to_string(Self::TYPE_STRING),
-            Self::Func(f_type) => f_type.name(),
-            Self::Struct(name) => str::to_string(name),
-        }
-    }
-}
-
-impl Display for ValType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FuncType {
-    args: Vec<ValType>,
-    ret_type: Option<ValType>,
-}
-
-impl FuncType {
-    pub fn new(args: Vec<ValType>, ret_type: Option<ValType>) -> Self {
-        Self { args, ret_type }
-    }
-
-    fn name(&self) -> String {
-        format!(
-            "{}({}){}",
-            ValType::TYPE_FUNC,
-            self.args
-                .iter()
-                .map(|vt| vt.to_string())
-                .collect::<Vec<String>>()
-                .join(", "),
-            if let Some(ret_type) = &self.ret_type {
-                format!(" {}", ret_type.name())
-            } else {
-                "".to_string()
-            }
-        )
-    }
-
-    pub fn args(&self) -> &[ValType] {
-        &self.args
-    }
-
-    pub fn ret_type(&self) -> &Option<ValType> {
-        &self.ret_type
-    }
-}
-
-impl PartialEq for FuncType {
-    fn eq(&self, other: &Self) -> bool {
-        self.args == other.args && self.ret_type == other.ret_type
     }
 }

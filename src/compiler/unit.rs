@@ -1,6 +1,6 @@
 use super::opcode::Chunk;
+use super::vtype::FuncType;
 use super::ValType;
-use crate::compiler::value::FuncType;
 
 #[derive(Clone, Debug)]
 pub enum CompilationUnit {

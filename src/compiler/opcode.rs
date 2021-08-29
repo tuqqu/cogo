@@ -8,7 +8,6 @@ use crate::lex::lexeme::Pos;
 #[allow(dead_code)]
 pub enum OpCode {
     // Control
-    Defer,
     Noop,
     Pop,
 

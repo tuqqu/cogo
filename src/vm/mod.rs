@@ -205,11 +205,6 @@ impl Vm {
                 OpCode::Pop => {
                     self.stack.pop()?;
                 }
-                // FIXME remove defer/debug
-                OpCode::Defer => {
-                    let val = self.stack.pop()?;
-                    writeln!(self.std_streams.stream_out(), "{:?}", val)?;
-                }
                 OpCode::VarGlobal(name, val_type) => {
                     let value = self.stack.retrieve(); //FIXME improve message when void function result is used
                     let mut value = value.clone();
@@ -498,12 +493,22 @@ impl Vm {
         let len = self.stack.len();
         let stack_pos = len - argc as usize;
 
-        let res = f.call(self.std_streams.as_ref(), self.stack.slice(stack_pos, len));
+        if let Some(fargc) = f.argc() {
+            if *fargc != argc {
+                return Err(VmError::Runtime(format!(
+                    "Expected {} params, got {}",
+                    fargc, argc
+                ))); //FIXME display
+            }
+        }
+
+        let res = f.call(self.stack.slice(stack_pos, len), self.std_streams.as_ref());
         for _ in 1..=argc {
             self.stack.pop()?;
         }
 
         if let Some(val) = res {
+            self.stack.pop()?;
             self.stack.push(val);
         }
 

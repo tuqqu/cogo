@@ -1,13 +1,14 @@
 use std::mem;
 
+use self::error::CompileError;
 pub use self::error::{ErrorHandler, ToStderrErrorHandler};
 use self::flow::ControlFlow;
 pub(crate) use self::opcode::OpCode;
+use self::scope::Scope;
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
-pub(crate) use self::value::{TypeError, ValType, Value};
-use crate::compiler::error::CompileError;
-use crate::compiler::scope::Scope;
-use crate::compiler::value::FuncType;
+pub(crate) use self::value::{TypeError, Value};
+use self::vtype::FuncType;
+pub(crate) use self::vtype::ValType;
 use crate::lex::lexeme::{Lexeme, Token};
 use crate::lex::Lexer;
 use crate::vm::CUnitFrame;
@@ -18,6 +19,7 @@ mod opcode;
 mod scope;
 pub(crate) mod unit;
 mod value;
+mod vtype;
 
 pub fn compile(src: &str, err_handler: &mut dyn ErrorHandler) -> CUnitFrame {
     let mut lexer = Lexer::new(src);
@@ -275,7 +277,26 @@ impl<'a> Compiler<'a> {
         ftype
     }
 
-    fn rule(&self, t: &Token) -> ParseRule<Self> {
+    fn rule(&self, mut t: &Token) -> ParseRule<Self> {
+        if matches!(
+            t,
+            Token::Int
+                | Token::Int8
+                | Token::Int16
+                | Token::Int32
+                | Token::Int64
+                | Token::Uint
+                | Token::Uint8
+                | Token::Uint16
+                | Token::Uint32
+                | Token::Uint64
+                | Token::Uintptr
+                | Token::Float32
+                | Token::Float64
+        ) {
+            t = &Token::Identifier
+        };
+
         match t {
             Token::LeftParen => (Some(Self::group), Some(Self::call), Precedence::Call),
             Token::RightParen => (None, None, Precedence::None),
@@ -394,14 +415,7 @@ impl<'a> Compiler<'a> {
 
     fn stmt(&mut self) {
         self.err_if_package();
-
-        // FIXME: change defer/debug
-        if self.consume_if(Token::Defer) {
-            self.expr();
-            self.consume(Token::Semicolon);
-            self.add_code(OpCode::Defer);
-            // FIXME: defer/debug
-        } else if self.consume_if(Token::For) {
+        if self.consume_if(Token::For) {
             self.stmt_for();
         } else if self.consume_if(Token::Switch) {
             self.stmt_switch();
