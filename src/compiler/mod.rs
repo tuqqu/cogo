@@ -429,7 +429,7 @@ impl<'a> Compiler<'a> {
     /// Simple expression or an empty expression with a semicolon
     fn stmt_simple(&mut self) {
         self.expr_simple();
-        self.consume_if(Token::Semicolon); //FIXME fix empty stmt
+        self.consume(Token::Semicolon);
     }
 
     fn expr_simple(&mut self) {
@@ -546,8 +546,10 @@ impl<'a> Compiler<'a> {
     }
 
     fn expr_expr(&mut self) {
-        self.expr();
-        self.add_code(OpCode::Pop);
+        if !self.check(Token::Semicolon) {
+            self.expr();
+            self.add_code(OpCode::Pop);
+        }
     }
 
     fn last_op_code_index(&self) -> usize {

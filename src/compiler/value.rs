@@ -78,6 +78,8 @@ impl Value {
                         ValType::Uint32 => Self::Uint32(*v as u32),
                         ValType::Uint64 => Self::Uint64(*v as u64),
                         ValType::Uintptr => Self::Uintptr(*v as usize),
+                        ValType::Float32 => Self::Float32(*v as f32),
+                        ValType::Float64 => Self::Float64(*v as f64),
                         _ => panic!("Wrong type for integer literal"),
                     }
                 } else {
@@ -214,14 +216,13 @@ impl Value {
             (Uint(lhs), Uint(rhs)) => *lhs += rhs,
 
             (FloatLiteral(lhs), FloatLiteral(rhs)) => *lhs += rhs,
+            (FloatLiteral(lhs), IntLiteral(rhs)) => *lhs += *rhs as f64,
             (Float32(lhs), Float32(rhs)) => *lhs += rhs,
             (Float32(lhs), FloatLiteral(rhs)) => *lhs += *rhs as f32,
-            (Float64(lhs), Float64(rhs)) => {
-                *lhs += rhs;
-            }
-            (Float64(lhs), FloatLiteral(rhs)) => {
-                *lhs += rhs;
-            }
+            (Float32(lhs), IntLiteral(rhs)) => *lhs += *rhs as f32,
+            (Float64(lhs), Float64(rhs)) => *lhs += rhs,
+            (Float64(lhs), FloatLiteral(rhs)) => *lhs += rhs,
+            (Float64(lhs), IntLiteral(rhs)) => *lhs += *rhs as f64,
 
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => {
                 *lhs += *rhs;
@@ -279,15 +280,14 @@ impl Value {
             (Uintptr(lhs), Uintptr(rhs)) => *lhs -= rhs,
             (Uint(lhs), Uint(rhs)) => *lhs -= rhs,
 
-            (FloatLiteral(lhs), FloatLiteral(rhs)) => *lhs += rhs,
+            (FloatLiteral(lhs), FloatLiteral(rhs)) => *lhs -= rhs,
+            (FloatLiteral(lhs), IntLiteral(rhs)) => *lhs -= *rhs as f64,
             (Float32(lhs), Float32(rhs)) => *lhs -= rhs,
             (Float32(lhs), FloatLiteral(rhs)) => *lhs -= *rhs as f32,
-            (Float64(lhs), Float64(rhs)) => {
-                *lhs -= rhs;
-            }
-            (Float64(lhs), FloatLiteral(rhs)) => {
-                *lhs -= rhs;
-            }
+            (Float32(lhs), IntLiteral(rhs)) => *lhs -= *rhs as f32,
+            (Float64(lhs), Float64(rhs)) => *lhs -= rhs,
+            (Float64(lhs), FloatLiteral(rhs)) => *lhs -= rhs,
+            (Float64(lhs), IntLiteral(rhs)) => *lhs -= *rhs as f64,
 
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => {
                 *lhs -= *rhs;
@@ -342,15 +342,14 @@ impl Value {
             (Uintptr(lhs), Uintptr(rhs)) => *lhs *= rhs,
             (Uint(lhs), Uint(rhs)) => *lhs *= rhs,
 
-            (FloatLiteral(lhs), FloatLiteral(rhs)) => *lhs += rhs,
+            (FloatLiteral(lhs), FloatLiteral(rhs)) => *lhs *= rhs,
+            (FloatLiteral(lhs), IntLiteral(rhs)) => *lhs *= *rhs as f64,
             (Float32(lhs), Float32(rhs)) => *lhs *= rhs,
             (Float32(lhs), FloatLiteral(rhs)) => *lhs *= *rhs as f32,
-            (Float64(lhs), Float64(rhs)) => {
-                *lhs *= rhs;
-            }
-            (Float64(lhs), FloatLiteral(rhs)) => {
-                *lhs *= rhs;
-            }
+            (Float32(lhs), IntLiteral(rhs)) => *lhs *= *rhs as f32,
+            (Float64(lhs), Float64(rhs)) => *lhs *= rhs,
+            (Float64(lhs), FloatLiteral(rhs)) => *lhs *= rhs,
+            (Float64(lhs), IntLiteral(rhs)) => *lhs *= *rhs as f64,
 
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => {
                 *lhs *= *rhs;
@@ -406,14 +405,13 @@ impl Value {
             (Uint(lhs), Uint(rhs)) => *lhs /= rhs,
 
             (FloatLiteral(lhs), FloatLiteral(rhs)) => *lhs /= rhs,
+            (FloatLiteral(lhs), IntLiteral(rhs)) => *lhs /= *rhs as f64,
             (Float32(lhs), Float32(rhs)) => *lhs /= rhs,
             (Float32(lhs), FloatLiteral(rhs)) => *lhs /= *rhs as f32,
-            (Float64(lhs), Float64(rhs)) => {
-                *lhs /= rhs;
-            }
-            (Float64(lhs), FloatLiteral(rhs)) => {
-                *lhs /= rhs;
-            }
+            (Float32(lhs), IntLiteral(rhs)) => *lhs /= *rhs as f32,
+            (Float64(lhs), Float64(rhs)) => *lhs /= rhs,
+            (Float64(lhs), FloatLiteral(rhs)) => *lhs /= rhs,
+            (Float64(lhs), IntLiteral(rhs)) => *lhs /= *rhs as f64,
 
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => {
                 *lhs /= *rhs;
@@ -469,14 +467,13 @@ impl Value {
             (Uint(lhs), Uint(rhs)) => *lhs %= rhs,
 
             (FloatLiteral(lhs), FloatLiteral(rhs)) => *lhs %= rhs,
+            (FloatLiteral(lhs), IntLiteral(rhs)) => *lhs %= *rhs as f64,
             (Float32(lhs), Float32(rhs)) => *lhs %= rhs,
             (Float32(lhs), FloatLiteral(rhs)) => *lhs %= *rhs as f32,
-            (Float64(lhs), Float64(rhs)) => {
-                *lhs %= rhs;
-            }
-            (Float64(lhs), FloatLiteral(rhs)) => {
-                *lhs %= rhs;
-            }
+            (Float32(lhs), IntLiteral(rhs)) => *lhs %= *rhs as f32,
+            (Float64(lhs), Float64(rhs)) => *lhs %= rhs,
+            (Float64(lhs), FloatLiteral(rhs)) => *lhs %= rhs,
+            (Float64(lhs), IntLiteral(rhs)) => *lhs %= *rhs as f64,
 
             (Complex64(lhs, lhs_i), Complex64(rhs, rhs_i)) => {
                 *lhs %= *rhs;
@@ -532,8 +529,6 @@ impl Value {
             (IntLiteral(lhs), Uintptr(rhs)) => Bool(lhs == &(*rhs as isize)),
             (IntLiteral(lhs), Uint(rhs)) => Bool(lhs == &(*rhs as isize)),
 
-            (IntLiteral(lhs), IntLiteral(rhs)) => Bool(lhs == &(*rhs as isize)),
-
             (Int8(lhs), IntLiteral(rhs)) => Bool(lhs == &(*rhs as i8)),
             (Int16(lhs), IntLiteral(rhs)) => Bool(lhs == &(*rhs as i16)),
             (Int32(lhs), IntLiteral(rhs)) => Bool(lhs == &(*rhs as i32)),
@@ -545,6 +540,20 @@ impl Value {
             (Uint64(lhs), IntLiteral(rhs)) => Bool(lhs == &(*rhs as u64)),
             (Uintptr(lhs), IntLiteral(rhs)) => Bool(lhs == &(*rhs as usize)),
             (Uint(lhs), IntLiteral(rhs)) => Bool(lhs == &(*rhs as usize)),
+
+            (IntLiteral(lhs), FloatLiteral(rhs)) => Bool(lhs == &(*rhs as isize)),
+            (FloatLiteral(lhs), IntLiteral(rhs)) => {
+                Bool((lhs - (*rhs as f64)).abs() < f64::EPSILON)
+            }
+
+            (Float32(lhs), FloatLiteral(rhs)) => Bool((lhs - (*rhs as f32)).abs() < f32::EPSILON),
+            (Float32(lhs), IntLiteral(rhs)) => Bool((lhs - (*rhs as f32)).abs() < f32::EPSILON),
+            (IntLiteral(lhs), Float32(rhs)) => Bool(lhs == &(*rhs as isize)),
+
+            (Float64(lhs), FloatLiteral(rhs)) => Bool((lhs - rhs).abs() < f64::EPSILON),
+            (Float64(lhs), IntLiteral(rhs)) => Bool((lhs - (*rhs as f64)).abs() < f64::EPSILON),
+            (IntLiteral(lhs), Float64(rhs)) => Bool(lhs == &(*rhs as isize)),
+
             _ => {
                 if mem::discriminant(self) != mem::discriminant(other) {
                     return Err(TypeError(format!(
@@ -843,23 +852,20 @@ impl Value {
         match &self {
             //FIXME check
             Self::Func(_) => true,
-            Self::FloatLiteral(_) => matches!(
-                v_type,
-                ValType::Float32 | ValType::Float64
-            ),
+            Self::FloatLiteral(_) => matches!(v_type, ValType::Float32 | ValType::Float64),
             Self::IntLiteral(_) => matches!(
                 v_type,
                 ValType::Int
-                | ValType::Int8
-                | ValType::Int16
-                | ValType::Int32
-                | ValType::Int64
-                | ValType::Uint
-                | ValType::Uint8
-                | ValType::Uint16
-                | ValType::Uint32
-                | ValType::Uint64
-                | ValType::Uintptr
+                    | ValType::Int8
+                    | ValType::Int16
+                    | ValType::Int32
+                    | ValType::Int64
+                    | ValType::Uint
+                    | ValType::Uint8
+                    | ValType::Uint16
+                    | ValType::Uint32
+                    | ValType::Uint64
+                    | ValType::Uintptr
             ),
             _ => self.get_type() == *v_type,
         }
@@ -886,11 +892,11 @@ impl Display for Value {
             Self::Uint(i) => i.to_string(),
             Self::Uintptr(i) => i.to_string(),
             Self::IntLiteral(i) => i.to_string(),
-            Self::Float32(f) => format!("{:.1}", f),
-            Self::Float64(f) => format!("{:.1}", f),
-            Self::FloatLiteral(f) => format!("{:.1}", f),
-            Self::Complex64(c, i) => format!("({:.1}+{:.1}i)", c, i),
-            Self::Complex128(c, i) => format!("({:.1}+{:.1}i)", c, i),
+            Self::Float32(f) => format!("{:e}", f),
+            Self::Float64(f) => format!("{:e}", f),
+            Self::FloatLiteral(f) => format!("{:e}", f),
+            Self::Complex64(c, i) => format!("({:e}+{:e}i)", c, i),
+            Self::Complex128(c, i) => format!("({:e}+{:e}i)", c, i),
             Self::String(s) => s.clone(),
             //FIXME add function tostring (via internal id)
             t => {
