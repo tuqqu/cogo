@@ -10,12 +10,10 @@ use cogo::vm::Vm;
 struct TestErrorHandler(Vec<String>);
 
 impl ErrorHandler for TestErrorHandler {
-    fn on_error(&mut self, errs: &[Box<dyn Error>]) -> ! {
+    fn on_error(&mut self, errs: &[Box<dyn Error>]) {
         for err in errs {
             self.0.push(err.to_string());
         }
-
-        process::exit(0);
     }
 }
 
@@ -40,11 +38,13 @@ pub fn compare_stderr_output(program: &str, expected_stderr: &str) {
 
     let mut err_handler = TestErrorHandler::new();
     let frame = compile(program, &mut err_handler);
+
+    assert!(err_handler.errs().is_empty());
+
     let mut vm = Vm::new(Some(Box::new(stream_provider)), frame);
     let res = vm.run();
 
     assert!(res.is_ok());
-    assert!(err_handler.errs().is_empty());
 
     let _out = &*vecout.borrow();
     let _out = String::from_utf8_lossy(_out);

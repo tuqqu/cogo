@@ -14,13 +14,13 @@ impl fmt::Display for CompileError {
 }
 
 pub trait ErrorHandler {
-    fn on_error(&mut self, errs: &[Box<dyn error::Error>]) -> !;
+    fn on_error(&mut self, errs: &[Box<dyn error::Error>]);
 }
 
 pub struct ToStderrErrorHandler;
 
 impl ErrorHandler for ToStderrErrorHandler {
-    fn on_error(&mut self, errs: &[Box<dyn error::Error>]) -> ! {
+    fn on_error(&mut self, errs: &[Box<dyn error::Error>]) {
         for err in errs {
             eprintln!("\x1b[0;31m{}\x1b[0m", err);
         }
