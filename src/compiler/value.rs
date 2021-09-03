@@ -7,7 +7,6 @@ use super::ValType;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    // Nil,
     Bool(bool),
 
     Int8(i8),
@@ -1216,10 +1215,8 @@ impl Display for Value {
                         .join(" ")
                 )
             }
-            //FIXME add function tostring (via internal id)
             t => {
-                dbg!(t);
-                panic!("Unknown type")
+                panic!("Unknown string type representation for value {}", t)
             }
         };
 

@@ -20,7 +20,6 @@ pub enum ValType {
     Complex128,
     String,
     Array(Box<Self>, usize),
-    // ArrayPointer(usize),
     Func(Box<FuncType>),
     Struct(String),
 }

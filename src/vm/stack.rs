@@ -54,7 +54,6 @@ impl<T> VmStack<T> {
         self.retrieve_at_mut(self.stack.len() - by - 1)
     }
 
-    //FIXME remove
     pub(super) fn last_mut(&mut self) -> &mut T {
         self.stack
             .last_mut()

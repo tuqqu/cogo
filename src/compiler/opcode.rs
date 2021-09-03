@@ -5,7 +5,6 @@ use super::{ValType, Value};
 use crate::lex::lexeme::Pos;
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum OpCode {
     // Control
     Noop,
@@ -43,15 +42,11 @@ pub enum OpCode {
     CaseBreakJump(usize),
     DoCaseBreakJump,
     Fallthrough,
-    Continue,
     Return(bool),
 
     Bool(Value),
-    Int(Value),
-    Float(Value),
     String(Value),
     Func(CompilationUnit),
-    Nil,
 
     // FIXME remove Value from here
     IntLiteral(Value),

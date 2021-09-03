@@ -1,5 +1,4 @@
 use std::cell::{Ref, RefCell, RefMut};
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::result;
 
@@ -42,7 +41,7 @@ impl VmNamedValue {
 type VmRuntimeCall = std::result::Result<(), VmError>;
 
 pub struct Vm {
-    globals: HashMap<String, VmNamedValue>, //FIXME use nametable
+    globals: NameTable<VmNamedValue>,
     names: NameTable<FuncUnit>,
     builtins: NameTable<FuncBuiltin>,
     std_streams: Box<dyn StreamProvider>,
@@ -57,7 +56,7 @@ impl Vm {
         frames.push(Rc::new(RefCell::new(entry_frame)));
 
         let mut vm = Self {
-            globals: HashMap::new(),
+            globals: NameTable::new(),
             names: NameTable::new(),
             builtins: NameTable::new(),
             stack: VmStack::new(),
@@ -146,10 +145,9 @@ impl Vm {
 
                     continue;
                 }
-                OpCode::Bool(v) | OpCode::Int(v) | OpCode::Float(v) | OpCode::String(v) => {
+                OpCode::Bool(v) | OpCode::String(v) => {
                     self.stack.push(v.clone()); //FIXME clone
                 }
-                // FIXME literals
                 OpCode::IntLiteral(v) | OpCode::FloatLiteral(v) => {
                     self.stack.push(v.clone()); //FIXME clone
                 }
@@ -222,14 +220,15 @@ impl Vm {
                         value.lose_literal_blindly();
                     }
 
-                    if self.globals.contains_key(&name) {
+                    if self.globals.has(&name) {
                         return Err(VmError::Compile(format!(
                             "Name \"{}\" already declared in this block.",
                             name
                         ))); //FIXME: err msg
                     }
 
-                    self.globals.insert(name.clone(), VmNamedValue::Var(value));
+                    self.globals
+                        .insert(name.clone(), VmNamedValue::Var(value))?;
                     self.stack.pop()?;
                 }
                 OpCode::ConstGlobal(name, val_type) => {
@@ -249,7 +248,7 @@ impl Vm {
                         value.lose_literal_blindly();
                     }
 
-                    if self.globals.contains_key(&name) {
+                    if self.globals.has(&name) {
                         return Err(VmError::Compile(format!(
                             "Name \"{}\" already declared in this block.",
                             name
@@ -257,11 +256,11 @@ impl Vm {
                     }
 
                     self.globals
-                        .insert(name.clone(), VmNamedValue::Const(value));
+                        .insert(name.clone(), VmNamedValue::Const(value))?;
                     self.stack.pop()?;
                 }
                 OpCode::GetGlobal(name) => {
-                    if let Some(nval) = self.globals.get(&name) {
+                    if let Ok(nval) = self.globals.get(&name) {
                         self.stack.push(nval.val().clone());
                     } else if let Ok(builtin) = self.builtins.get(&name) {
                         let val = Value::FuncBuiltin(builtin.name().to_string());
@@ -272,7 +271,7 @@ impl Vm {
                     }
                 }
                 OpCode::SetGlobal(name) => {
-                    if !self.globals.contains_key(&name) {
+                    if !self.globals.has(&name) {
                         return Err(VmError::Compile(format!(
                             "Name \"{}\" is not previously defined.",
                             name
@@ -282,7 +281,7 @@ impl Vm {
                     let value = self.stack.retrieve_mut();
                     value.copy_if_soft_reference();
 
-                    let old_v = self.globals.get_mut(&name).unwrap();
+                    let old_v = self.globals.get_mut(&name)?;
 
                     if let VmNamedValue::Const(_) = old_v {
                         return Err(VmError::Compile(format!(
@@ -548,11 +547,7 @@ impl Vm {
                         last.fall_flag = false;
                     }
                 }
-                _ => {}
             }
-
-            // eprintln!("\x1b[0;32m{:?}\x1b[0m", self.stack);
-            // eprintln!("\x1b[0;37m{:?}\x1b[0m", self.names);
 
             self.current_frame_mut().inc_pointer(1);
         }

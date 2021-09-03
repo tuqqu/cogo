@@ -2,6 +2,7 @@ use super::opcode::Chunk;
 use super::vtype::FuncType;
 use super::ValType;
 
+/// Chunk of Opcodes which belongs to either a function or a package
 #[derive(Clone, Debug)]
 pub enum CompilationUnit {
     Package(PackageUnit),

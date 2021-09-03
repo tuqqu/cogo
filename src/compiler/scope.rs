@@ -1,3 +1,7 @@
+/// Scope counter and resolver
+/// Tracks the depth of a scope we are in
+/// Has the notion of all the variables inside the scope
+/// Can resolve them and say if they are defined or not
 #[derive(Debug)]
 pub(super) struct Scope {
     pub(super) vars: Vec<Local>,
@@ -41,7 +45,6 @@ impl Scope {
     }
 
     pub(super) fn resolve(&self, name: &str) -> Option<(usize, bool)> {
-        //FIXME fix the var x = x scoped problem
         for i in (0..self.vars.len()).rev() {
             if self.vars[i].name == *name {
                 return Some((i, self.vars[i].mutable));

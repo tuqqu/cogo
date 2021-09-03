@@ -1,16 +1,6 @@
 use std::collections::HashMap;
 use std::result;
 
-// use std::sync::atomic::{AtomicUsize, Ordering};
-
-// pub type NameId = usize;
-//
-// static ATOMIC_COUNTER: AtomicUsize = AtomicUsize::new(1);
-//
-// fn next_id() -> NameId {
-//     ATOMIC_COUNTER.fetch_add(1, Ordering::Relaxed)
-// }
-
 #[derive(Debug)]
 pub(super) struct NameTable<N>(HashMap<String, N>);
 
@@ -21,6 +11,10 @@ type NameResult<T> = result::Result<T, NameError>;
 impl<N> NameTable<N> {
     pub(super) fn new() -> Self {
         Self(HashMap::new())
+    }
+
+    pub(super) fn has(&self, name: &str) -> bool {
+        self.0.contains_key(name)
     }
 
     pub(super) fn insert(&mut self, name: String, value: N) -> NameResult<()> {
@@ -35,6 +29,15 @@ impl<N> NameTable<N> {
 
     pub(super) fn get(&mut self, name: &str) -> NameResult<&N> {
         let value = self.0.get(name);
+        if let Some(value) = value {
+            Ok(value)
+        } else {
+            Err(NameError(format!("No name {} exists", name)))
+        }
+    }
+
+    pub(super) fn get_mut(&mut self, name: &str) -> NameResult<&mut N> {
+        let value = self.0.get_mut(name);
         if let Some(value) = value {
             Ok(value)
         } else {

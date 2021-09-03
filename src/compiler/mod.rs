@@ -75,6 +75,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    /// Compilation entry point
+    /// Returns Compilation Unit ("main" package) and a slice of errors
     fn compile(&mut self) -> (CUnit, &[Box<dyn std::error::Error>]) {
         self.add_code(OpCode::Noop);
         self.decl_package();
@@ -87,6 +89,7 @@ impl<'a> Compiler<'a> {
         (self.cunit.clone(), &self.errs)
     }
 
+    /// Parses package declaration statement
     fn decl_package(&mut self) {
         if !self.is_package_scope() {
             self.err("Package declaration can be only in package level".to_string());
@@ -94,7 +97,7 @@ impl<'a> Compiler<'a> {
         }
 
         if self.consume_if(Token::Package) {
-            let name = self.parse_var().to_string();
+            let name = self.parse_name().to_string();
             if let CUnit::Package(p) = &mut self.cunit {
                 p.set_name(name.clone());
                 self.cur_package = Some(Package(name));
@@ -108,6 +111,7 @@ impl<'a> Compiler<'a> {
         self.consume(Token::Semicolon);
     }
 
+    /// Various types of declarations
     fn decl(&mut self) {
         if self.consume_if(Token::Var) {
             self.decl_var();
@@ -125,32 +129,35 @@ impl<'a> Compiler<'a> {
     }
 
     fn decl_var(&mut self) {
-        let name = self.parse_var().to_string();
+        let name = self.parse_name().to_string();
 
-        self.decl_scoped_var(name.clone());
+        self.decl_scoped_name(name.clone());
 
-        // FIXME change to just parse type and remake logic, same in const
-        let val_type = self.parse_type_optionally(Token::Equal);
+        let vtype = if !self.check(Token::Equal) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
 
         if self.consume_if(Token::Equal) {
             self.expr();
-            self.def_var(name, val_type, true, true);
+            self.def_var(name, vtype, true, true);
         } else {
-            if val_type.is_none() {
+            if vtype.is_none() {
                 self.err("Type declaration expected.".to_string());
             }
 
-            self.add_code(OpCode::PutDefaultValue(val_type.clone().unwrap()));
-            self.def_var(name, val_type, false, true);
+            self.add_code(OpCode::PutDefaultValue(vtype.clone().unwrap()));
+            self.def_var(name, vtype, false, true);
         }
 
         self.consume(Token::Semicolon);
     }
 
     fn expr_decl_short_var(&mut self) {
-        let name = self.parse_var().to_string();
+        let name = self.parse_name().to_string();
         self.consume(Token::ColonEqual);
-        self.decl_scoped_var(name.clone());
+        self.decl_scoped_name(name.clone());
         self.expr();
         self.def_var(name, None, false, true);
     }
@@ -177,19 +184,23 @@ impl<'a> Compiler<'a> {
     }
 
     fn decl_const(&mut self) {
-        let name = self.parse_var().to_string();
+        let name = self.parse_name().to_string();
 
         self.decl_scoped_const(name.clone());
 
-        let val_type = self.parse_type_optionally(Token::Equal);
+        let vtype = if !self.check(Token::Equal) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
         self.consume(Token::Equal);
         self.expr_const();
 
         if self.is_global_scope() {
-            self.add_code(OpCode::ConstGlobal(name, val_type));
+            self.add_code(OpCode::ConstGlobal(name, vtype));
         } else {
-            if let Some(val_type) = val_type {
-                self.add_code(OpCode::ValidateTypeWithLiteralCast(val_type));
+            if let Some(vtype) = vtype {
+                self.add_code(OpCode::ValidateTypeWithLiteralCast(vtype));
             } else {
                 self.add_code(OpCode::LiteralCast);
             }
@@ -201,7 +212,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn decl_func(&mut self) {
-        let name = self.parse_var().to_string();
+        let name = self.parse_name().to_string();
         let ftype = self.func(Some(name.clone()));
         self.def_var(name, Some(ValType::Func(Box::new(ftype))), false, false);
     }
@@ -219,15 +230,14 @@ impl<'a> Compiler<'a> {
                     self.err("Maximum parameter count reached.".to_string());
                 }
 
-                // FIXME add anon parameter support
-                let param_name = String::from(self.parse_var());
+                // no anonimous parameter support
+                let param_name = String::from(self.parse_name());
                 let param_type = self.parse_type();
 
                 param_names.push(param_name.clone());
                 param_types.push(param_type.clone());
 
-                // FIXME those two methods ought to be together, maybe group them?
-                self.decl_scoped_var(param_name.clone());
+                self.decl_scoped_name(param_name.clone());
                 // It neither is a global scope nor validation case, so no codes are added here
                 self.def_var(param_name, Some(param_type), false, false);
 
@@ -243,7 +253,11 @@ impl<'a> Compiler<'a> {
 
         self.consume(Token::RightParen);
 
-        let ret_type = self.parse_type_optionally(Token::LeftCurlyBrace);
+        let ret_type = if !self.check(Token::LeftCurlyBrace) {
+            Some(self.parse_type())
+        } else {
+            None
+        };
         let ftype = FuncType::new(param_types.clone(), ret_type);
 
         // Before this line there ought not to be any OpCode addition to the current CUnit
@@ -267,7 +281,7 @@ impl<'a> Compiler<'a> {
 
         let mut cunit = mem::replace(&mut self.cunit, cunit);
         if let CUnit::Function(funit) = &mut cunit {
-            match EntryPoint::check_entry_point(self.cur_package.as_ref().unwrap(), funit) {
+            match entry_point::check(self.cur_package.as_ref().unwrap(), funit) {
                 Ok(()) => {}
                 Err(e) => self.err(e.0),
             }
@@ -342,7 +356,6 @@ impl<'a> Compiler<'a> {
             Token::Var => (None, None, Precedence::None),
             Token::Const => (None, None, Precedence::None),
             Token::Eof => (None, None, Precedence::None),
-            // FIXME move to error
             tok => panic!("Unknown token {}", tok),
         }
     }
@@ -414,7 +427,7 @@ impl<'a> Compiler<'a> {
                 return;
             }
             match self.current().token {
-                Struct | Func | Var | If | For | Return => return,
+                Struct | Func | Var | If | For | Return | Switch | Const => return,
                 _ => {}
             }
 
@@ -573,7 +586,7 @@ impl<'a> Compiler<'a> {
     fn last_op_code_index(&self) -> usize {
         let len = self.code_len();
         if len == 0 {
-            return 0; //09
+            return 0; // returns 0 if there are no opcodes
         }
 
         len - 1
@@ -583,19 +596,16 @@ impl<'a> Compiler<'a> {
         self.parse_precedence(Precedence::Assignment)
     }
 
-    // FIXME: make parse only const expressions
     fn expr_const(&mut self) {
         self.parse_precedence(Precedence::Assignment)
     }
 
-    //FIXME var -> name
-    fn parse_var(&mut self) -> &str {
+    fn parse_name(&mut self) -> &str {
         self.consume(Token::Identifier);
         &self.prev().literal
     }
 
-    //FIXME change name from var to name
-    fn decl_scoped_var(&mut self, name: String) {
+    fn decl_scoped_name(&mut self, name: String) {
         if self.is_global_scope() {
             return;
         }
@@ -619,14 +629,7 @@ impl<'a> Compiler<'a> {
         self.scope.add_const(name);
     }
 
-    fn parse_type_optionally(&mut self, if_not: Token) -> Option<ValType> {
-        if !self.check(if_not) {
-            Some(self.parse_type())
-        } else {
-            None
-        }
-    }
-
+    /// Either returns a fully constructed value type or panics
     fn parse_type(&mut self) -> ValType {
         let current = self.current();
         let val_type = match current.token {
@@ -680,6 +683,7 @@ impl<'a> Compiler<'a> {
         size
     }
 
+    /// For array literal bodies (the curly braced part of expressions like `[2]int{1, 2}`)
     fn parse_array_body(&mut self) -> usize {
         self.consume(Token::LeftCurlyBrace);
 
@@ -703,6 +707,7 @@ impl<'a> Compiler<'a> {
         len
     }
 
+    /// All forms of `switch` statements
     fn stmt_switch(&mut self) {
         self.begin_switch();
 
@@ -766,7 +771,10 @@ impl<'a> Compiler<'a> {
         self.end_switch();
     }
 
+    /// Case blocks of switch statements
     fn case_block(&mut self) {
+        // each case block has its own scope
+        // even tho its not enclosed in curly braces
         self.begin_scope();
 
         self.consume(Token::Colon);
@@ -780,15 +788,17 @@ impl<'a> Compiler<'a> {
             self.decl();
         }
 
+        // `fallthrough`, if present, must be the last statement
         if self.consume_if(Token::Fallthrough) {
             self.stmt_fallthrough();
-            self.consume(Token::Semicolon); //FIXME or move it in stmt?
+            self.consume(Token::Semicolon);
         }
         // FIXME change error msg when fallthrough is not the last stmt
 
         self.end_scope();
     }
 
+    /// All forms of `for` statements
     fn stmt_for(&mut self) {
         self.begin_loop();
 
@@ -870,6 +880,7 @@ impl<'a> Compiler<'a> {
         self.end_loop();
     }
 
+    /// `if` statement, covers `if else` and `else` clauses as well
     fn stmt_if(&mut self) {
         self.expr();
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
@@ -935,6 +946,7 @@ impl<'a> Compiler<'a> {
         });
     }
 
+    /// Expressions with a compound operator like `+=`
     fn expr_compound_assign(&mut self, context: val_context::Context) {
         let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
@@ -956,7 +968,7 @@ impl<'a> Compiler<'a> {
             (OpCode::GetGlobal(name.clone()), OpCode::SetGlobal(name))
         };
 
-        // FIXME
+        // Hack to make possible nested index call in an assignment context
         if val_context::is_index(context) {
             self.duplicate_codes(self.index_depth * 2);
             self.index_depth = 0;
@@ -983,6 +995,7 @@ impl<'a> Compiler<'a> {
         self.add_code(set_code);
     }
 
+    /// Expressions with a unary assignment operator `++` or `--`
     fn expr_inc(&mut self, context: val_context::Context) {
         let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
@@ -1004,7 +1017,7 @@ impl<'a> Compiler<'a> {
             (OpCode::GetGlobal(name.clone()), OpCode::SetGlobal(name))
         };
 
-        // FIXME
+        // Hack to make possible nested index call in an assignment context
         if val_context::is_index(context) {
             self.duplicate_codes(self.index_depth * 2);
             self.index_depth = 0;
@@ -1025,6 +1038,7 @@ impl<'a> Compiler<'a> {
         self.add_code(set_code);
     }
 
+    /// Assignment expression with a single assignment
     fn expr_assign(&mut self, context: val_context::Context) {
         let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
@@ -1051,6 +1065,8 @@ impl<'a> Compiler<'a> {
         self.add_code(code);
     }
 
+    /// Parses named variable value.
+    /// Expects `context` of a variable to be able to decide which opcodes to emit
     fn named_var(&mut self, context: val_context::Context) {
         if val_context::is_assignment(context) {
             if self.check(Token::Equal) {
@@ -1239,6 +1255,7 @@ impl<'a> Compiler<'a> {
         self.cunit.chunk_mut().write(code, pos)
     }
 
+    /// Duplicates last N opcodes.
     fn duplicate_codes(&mut self, last: usize) {
         let len = self.cunit.chunk().codes().len();
         let mut codes = vec![];
@@ -1252,7 +1269,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    /// Remove last OpCode if it matches.
+    /// Removes last OpCode if it matches.
     /// Panic otherwise to prevent possible errors
     fn pop_code(&mut self, code: OpCode) {
         let popped = self.cunit.chunk_mut().pop().unwrap();
@@ -1262,10 +1279,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_entry_point(&mut self) {
-        self.add_code(OpCode::GetGlobal(EntryPoint::FUNC_NAME.to_string()));
+        self.add_code(OpCode::GetGlobal(entry_point::FUNC_NAME.to_string()));
         self.add_code(OpCode::Call(0));
     }
 
+    /// Adjust the value of previously put Jump opcode
+    /// `i` is the new position where the Jump must lead
     fn finish_jump(&mut self, i: usize) {
         let jump = self.last_op_code_index() - i;
 
@@ -1296,6 +1315,7 @@ impl<'a> Compiler<'a> {
     }
 }
 
+/// Operation precedence
 #[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
 enum Precedence {
     None = 0,
@@ -1332,22 +1352,25 @@ impl Precedence {
 }
 
 struct Package(String);
-struct EntryPoint;
+
 struct SignatureError(String);
 type SignValidationResult = std::result::Result<(), SignatureError>;
 
-impl EntryPoint {
-    const PACK_NAME: &'static str = "main";
-    const FUNC_NAME: &'static str = "main";
+/// Entry point validation and check.
+mod entry_point {
+    use super::*;
 
-    fn check_entry_point(pack: &Package, funit: &FuncUnit) -> SignValidationResult {
-        if pack.0 == Self::PACK_NAME && funit.name() == Self::FUNC_NAME {
-            if Self::validate_signature(funit) {
+    pub(super) const FUNC_NAME: &str = "main";
+    const PACK_NAME: &str = "main";
+
+    pub(super) fn check(pack: &Package, funit: &FuncUnit) -> SignValidationResult {
+        if pack.0 == PACK_NAME && funit.name() == FUNC_NAME {
+            if validate_signature(funit) {
                 Ok(())
             } else {
                 Err(SignatureError(format!(
                     "Function \"{}\" must not have parameters and a return value",
-                    Self::FUNC_NAME,
+                    FUNC_NAME,
                 )))
             }
         } else {
@@ -1377,6 +1400,7 @@ const ASSIGN_OPERATORS: [Token; 12] = [
 
 const INC_OPERATORS: [Token; 2] = [Token::Inc, Token::Dec];
 
+/// Value context.
 mod val_context {
     pub type Context = u8;
 
