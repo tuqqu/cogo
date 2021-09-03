@@ -18,7 +18,7 @@ func main() {
 }
 
 func contains(vec [5]int, val int) bool {
-    for i := 0; i < 5; i++ {
+    for i := 0; i < len(vec); i++ {
         if vec[i] == val {
             return true
         }

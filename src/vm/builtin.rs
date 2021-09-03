@@ -1,6 +1,8 @@
 #[allow(unused_imports)]
 use std::io::Write;
+use std::result;
 
+use super::error::VmError;
 use super::io::StreamProvider;
 use super::Vm;
 use crate::compiler::{ValType, Value};
@@ -11,14 +13,15 @@ pub(super) struct FuncBuiltin {
     func: Builtin,
 }
 
-type Builtin = fn(argv: &[Value], streams: &dyn StreamProvider) -> Option<Value>;
+type Builtin = fn(argv: &[Value], streams: &dyn StreamProvider) -> CallResult;
+pub(super) type CallResult = result::Result<Option<Value>, VmError>;
 
 impl FuncBuiltin {
     pub(super) fn new(name: &'static str, argc: Option<u8>, func: Builtin) -> Self {
         Self { name, func, argc }
     }
 
-    pub(super) fn call(&self, argv: &[Value], streams: &dyn StreamProvider) -> Option<Value> {
+    pub(super) fn call(&self, argv: &[Value], streams: &dyn StreamProvider) -> CallResult {
         (self.func)(argv, streams)
     }
 
@@ -48,6 +51,7 @@ impl Vm {
         self.define_builtin("uint64", Some(1), builtin_uint64);
         self.define_builtin("float32", Some(1), builtin_float32);
         self.define_builtin("float64", Some(1), builtin_float64);
+        self.define_builtin("len", Some(1), builtin_len);
     }
 
     fn define_builtin(&mut self, name: &'static str, argc: Option<u8>, func: Builtin) {
@@ -57,7 +61,7 @@ impl Vm {
     }
 }
 
-fn builtin_print(argv: &[Value], streams: &dyn StreamProvider) -> Option<Value> {
+fn builtin_print(argv: &[Value], streams: &dyn StreamProvider) -> CallResult {
     write!(
         &mut streams.stream_err(),
         "{}",
@@ -67,10 +71,10 @@ fn builtin_print(argv: &[Value], streams: &dyn StreamProvider) -> Option<Value> 
             .join("")
     )
     .unwrap();
-    None
+    Ok(None)
 }
 
-fn builtin_println(argv: &[Value], streams: &dyn StreamProvider) -> Option<Value> {
+fn builtin_println(argv: &[Value], streams: &dyn StreamProvider) -> CallResult {
     writeln!(
         &mut streams.stream_err(),
         "{}",
@@ -80,90 +84,107 @@ fn builtin_println(argv: &[Value], streams: &dyn StreamProvider) -> Option<Value
             .join(" ")
     )
     .unwrap();
-    None
+    Ok(None)
 }
 
-fn builtin_int(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_int(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_int8(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_int8(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int8);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_int16(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_int16(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int16);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_int32(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_int32(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int32);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_int64(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_int64(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int64);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_uint(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_uint(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_uint8(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_uint8(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint8);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_uint16(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_uint16(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint16);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_uint32(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_uint32(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint32);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_uint64(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_uint64(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint64);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_uintptr(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_uintptr(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uintptr);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_float32(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_float32(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Float32);
-    Some(v)
+    Ok(Some(v))
 }
 
-fn builtin_float64(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+fn builtin_float64(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Float64);
-    Some(v)
+    Ok(Some(v))
 }
 
 //FIXME
-// fn builtin_string(argv: &[Value], _: &dyn StreamProvider) -> Option<Value> {
+// fn builtin_string(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
 //     let v = argv.first().unwrap();
 //     let v = v.cast_to(ValType::String);
 //     Some(v)
 // }
+
+fn builtin_len(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
+    let v = argv.first().unwrap();
+    let len = match v {
+        Value::String(v) => v.len(),
+        Value::Array(_, size, _) => *size,
+        _ => {
+            return Err(VmError::Compile(format!(
+                "Invalid argument type {}",
+                v.get_type().name()
+            )))
+        }
+    };
+
+    // go specification dictates type int, not uint
+    Ok(Some(Value::Int(len as isize)))
+}

@@ -586,7 +586,7 @@ impl Vm {
             }
         }
 
-        let res = f.call(self.stack.slice(stack_pos, len), self.std_streams.as_ref());
+        let res = f.call(self.stack.slice(stack_pos, len), self.std_streams.as_ref())?;
         for _ in 1..=argc {
             self.stack.pop()?;
         }
