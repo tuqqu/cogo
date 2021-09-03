@@ -19,6 +19,8 @@ pub enum ValType {
     Complex64,
     Complex128,
     String,
+    Array(Box<Self>, usize),
+    // ArrayPointer(usize),
     Func(Box<FuncType>),
     Struct(String),
 }
@@ -64,6 +66,7 @@ impl ValType {
             Self::Complex64 => str::to_string(Self::TYPE_COMPLEX64),
             Self::Complex128 => str::to_string(Self::TYPE_COMPLEX128),
             Self::String => str::to_string(Self::TYPE_STRING),
+            Self::Array(vtype, size) => format!("[{}]{}", size, vtype),
             Self::Func(f_type) => f_type.name(),
             Self::Struct(name) => str::to_string(name),
         }

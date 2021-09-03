@@ -50,9 +50,10 @@ struct Compiler<'a> {
     scope: Scope,
     control_flow: ControlFlow,
     cur_package: Option<Package>,
+    index_depth: usize,
 }
 
-type ParseCallback<T> = fn(&mut T);
+type ParseCallback<T> = fn(&mut T, bool);
 type ParseRule<T> = (
     Option<ParseCallback<T>>,
     Option<ParseCallback<T>>,
@@ -70,6 +71,7 @@ impl<'a> Compiler<'a> {
             scope: Scope::new(),
             control_flow: ControlFlow::new(),
             cur_package: None,
+            index_depth: 0,
         }
     }
 
@@ -166,6 +168,7 @@ impl<'a> Compiler<'a> {
                     self.add_code(OpCode::LiteralCast);
                 }
             } else if litcast {
+                self.add_code(OpCode::LoseSoftReference);
                 self.add_code(OpCode::LiteralCast);
             }
 
@@ -243,7 +246,7 @@ impl<'a> Compiler<'a> {
         let ret_type = self.parse_type_optionally(Token::LeftCurlyBrace);
         let ftype = FuncType::new(param_types.clone(), ret_type);
 
-        // Before this line there ought not to be any OpCode addition to the CUnit in this function
+        // Before this line there ought not to be any OpCode addition to the current CUnit
         let cunit = CUnit::Function(FuncUnit::new(name, ftype.clone(), param_names));
         let cunit = mem::replace(&mut self.cunit, cunit);
 
@@ -302,6 +305,8 @@ impl<'a> Compiler<'a> {
             Token::RightParen => (None, None, Precedence::None),
             Token::LeftCurlyBrace => (None, None, Precedence::None),
             Token::RightCurlyBrace => (None, None, Precedence::None),
+            Token::LeftBracket => (Some(Self::literal), Some(Self::index), Precedence::Index),
+            Token::RightBracket => (None, None, Precedence::None),
             Token::Comma => (None, None, Precedence::None),
             Token::Dot => (None, None, Precedence::None),
             Token::Minus => (Some(Self::unary), Some(Self::binary), Precedence::Term),
@@ -383,12 +388,16 @@ impl<'a> Compiler<'a> {
         self.next().token == tok
     }
 
-    fn check_next_in(&mut self, toks: &[Token]) -> bool {
-        toks.contains(&self.next().token)
+    fn check_in(&mut self, toks: &[Token]) -> bool {
+        toks.contains(&self.current().token)
     }
 
     fn advance(&mut self) {
         self.current += 1;
+    }
+
+    fn rollback(&mut self) {
+        self.current -= 1;
     }
 
     fn err(&mut self, msg: String) {
@@ -449,12 +458,6 @@ impl<'a> Compiler<'a> {
     fn expr_simple(&mut self) {
         if self.check(Token::Identifier) && self.check_next(Token::ColonEqual) {
             self.expr_decl_short_var();
-        } else if self.check(Token::Identifier) && self.check_next(Token::Equal) {
-            self.expr_assign();
-        } else if self.check(Token::Identifier) && self.check_next_in(&ASSIGN_OPERATORS) {
-            self.expr_compound_assign();
-        } else if self.check(Token::Identifier) && self.check_next_in(&INC_OPERATORS) {
-            self.expr_inc();
         } else {
             self.expr_expr();
         };
@@ -557,6 +560,7 @@ impl<'a> Compiler<'a> {
         }
 
         self.consume(Token::RightCurlyBrace);
+        self.consume_if(Token::Semicolon);
     }
 
     fn expr_expr(&mut self) {
@@ -576,12 +580,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn expr(&mut self) {
-        self.parse_precedence(Precedence::Or)
+        self.parse_precedence(Precedence::Assignment)
     }
 
     // FIXME: make parse only const expressions
     fn expr_const(&mut self) {
-        self.parse_precedence(Precedence::Or)
+        self.parse_precedence(Precedence::Assignment)
     }
 
     //FIXME var -> name
@@ -650,6 +654,16 @@ impl<'a> Compiler<'a> {
             Token::Complex128 => ValType::Complex128,
 
             Token::String => ValType::String,
+
+            Token::LeftBracket => {
+                self.advance();
+                let size = self.parse_constant_int();
+                self.consume(Token::RightBracket);
+                let array_type = self.parse_type();
+
+                return ValType::Array(Box::new(array_type), size);
+            }
+
             Token::Identifier => ValType::Struct(current.literal.clone()),
             tok => panic!("Type expected, got {}.", tok),
         };
@@ -657,6 +671,36 @@ impl<'a> Compiler<'a> {
         self.advance();
 
         val_type
+    }
+
+    fn parse_constant_int(&mut self) -> usize {
+        self.advance();
+        let size = self.prev().literal.parse::<usize>().unwrap();
+
+        size
+    }
+
+    fn parse_array_body(&mut self) -> usize {
+        self.consume(Token::LeftCurlyBrace);
+
+        let mut len = 0;
+        if !self.check(Token::RightCurlyBrace) {
+            loop {
+                self.expr();
+                len += 1;
+
+                if !self.consume_if(Token::Comma) {
+                    break;
+                }
+
+                if self.check(Token::RightCurlyBrace) {
+                    break;
+                }
+            }
+        }
+        self.consume(Token::RightCurlyBrace);
+
+        len
     }
 
     fn stmt_switch(&mut self) {
@@ -708,6 +752,7 @@ impl<'a> Compiler<'a> {
         }
 
         self.consume(Token::RightCurlyBrace);
+        self.consume_if(Token::Semicolon);
 
         if let Some(default_jump) = default_jump {
             self.add_code(OpCode::DefaultJump(self.code_len() - default_jump));
@@ -849,14 +894,14 @@ impl<'a> Compiler<'a> {
         self.finish_jump(jump);
     }
 
-    fn and(&mut self) {
+    fn and(&mut self, _: bool) {
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
         self.parse_precedence(Precedence::And);
         self.finish_jump(if_jump);
     }
 
-    fn or(&mut self) {
+    fn or(&mut self, _: bool) {
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         let jump = self.add_code(OpCode::Jump(0));
 
@@ -867,38 +912,56 @@ impl<'a> Compiler<'a> {
         self.finish_jump(jump);
     }
 
-    fn string(&mut self) {
+    fn string(&mut self, _: bool) {
         let string = Value::String(self.prev().literal.clone());
         self.add_code(OpCode::String(string));
     }
 
-    fn int(&mut self) {
+    fn int(&mut self, _: bool) {
         let int = Value::IntLiteral(self.prev().literal.parse::<isize>().unwrap());
         self.add_code(OpCode::IntLiteral(int));
     }
 
-    fn float(&mut self) {
+    fn float(&mut self, _: bool) {
         let float = Value::FloatLiteral(self.prev().literal.parse::<f64>().unwrap());
         self.add_code(OpCode::FloatLiteral(float));
     }
 
-    fn var(&mut self) {
-        self.named_var();
+    fn var(&mut self, assign: bool) {
+        self.named_var(if assign {
+            val_context::ASSIGNMENT
+        } else {
+            val_context::NONE
+        });
     }
 
-    fn expr_compound_assign(&mut self) {
-        let name = self.parse_var().to_string();
+    fn expr_compound_assign(&mut self, context: val_context::Context) {
+        let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
+
         let (get_code, set_code) = if let Some((i, mutable)) = resolved {
             if mutable {
-                (OpCode::GetLocal(i), OpCode::SetLocal(i))
+                if val_context::is_index(context) {
+                    (OpCode::GetIndex, OpCode::SetIndex)
+                } else {
+                    (OpCode::GetLocal(i), OpCode::SetLocal(i))
+                }
             } else {
                 self.err("Trying to assign to a const".to_string());
                 return;
             }
+        } else if val_context::is_index(context) {
+            (OpCode::GetIndex, OpCode::SetIndex)
         } else {
             (OpCode::GetGlobal(name.clone()), OpCode::SetGlobal(name))
         };
+
+        // FIXME
+        if val_context::is_index(context) {
+            self.duplicate_codes(self.index_depth * 2);
+            self.index_depth = 0;
+        }
+
         self.add_code(get_code);
 
         self.advance();
@@ -918,22 +981,34 @@ impl<'a> Compiler<'a> {
         self.expr();
         self.add_code(code);
         self.add_code(set_code);
-        self.add_code(OpCode::Pop);
     }
 
-    fn expr_inc(&mut self) {
-        let name = self.parse_var().to_string();
+    fn expr_inc(&mut self, context: val_context::Context) {
+        let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
+
         let (get_code, set_code) = if let Some((i, mutable)) = resolved {
             if mutable {
-                (OpCode::GetLocal(i), OpCode::SetLocal(i))
+                if val_context::is_index(context) {
+                    (OpCode::GetIndex, OpCode::SetIndex)
+                } else {
+                    (OpCode::GetLocal(i), OpCode::SetLocal(i))
+                }
             } else {
                 self.err("Trying to assign to a const".to_string());
                 return;
             }
+        } else if val_context::is_index(context) {
+            (OpCode::GetIndex, OpCode::SetIndex)
         } else {
             (OpCode::GetGlobal(name.clone()), OpCode::SetGlobal(name))
         };
+
+        // FIXME
+        if val_context::is_index(context) {
+            self.duplicate_codes(self.index_depth * 2);
+            self.index_depth = 0;
+        }
 
         self.add_code(get_code);
         self.advance();
@@ -948,41 +1023,68 @@ impl<'a> Compiler<'a> {
         self.add_code(OpCode::IntLiteral(Value::IntLiteral(1)));
         self.add_code(code);
         self.add_code(set_code);
-        self.add_code(OpCode::Pop);
     }
 
-    fn expr_assign(&mut self) {
-        let name = self.parse_var().to_string();
+    fn expr_assign(&mut self, context: val_context::Context) {
+        let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
 
         self.consume(Token::Equal);
         self.expr();
         let code = if let Some((i, mutable)) = resolved {
             if mutable {
-                OpCode::SetLocal(i)
+                if val_context::is_index(context) {
+                    OpCode::SetIndex
+                } else {
+                    OpCode::SetLocal(i)
+                }
             } else {
                 self.err("Trying to assign to a const".to_string());
                 return;
             }
+        } else if val_context::is_index(context) {
+            OpCode::SetIndex
         } else {
             OpCode::SetGlobal(name)
         };
 
         self.add_code(code);
-        self.add_code(OpCode::Pop);
     }
 
-    // FIXME: refactor the logic
-    fn named_var(&mut self) {
+    fn named_var(&mut self, context: val_context::Context) {
+        if val_context::is_assignment(context) {
+            if self.check(Token::Equal) {
+                self.expr_assign(context);
+            } else if self.check_in(&ASSIGN_OPERATORS) {
+                self.expr_compound_assign(context);
+            } else if self.check_in(&INC_OPERATORS) {
+                self.expr_inc(context);
+            } else {
+                self.expr_get_var(context);
+            }
+        } else {
+            self.expr_get_var(context);
+        }
+    }
+
+    fn expr_get_var(&mut self, context: val_context::Context) {
         let name = self.prev().literal.clone();
         let resolved = self.scope.resolve(&name);
 
         let code = if let Some((i, _)) = resolved {
             if self.scope.vars[i].depth == -1 {
-                OpCode::GetGlobal(name)
+                if val_context::is_index(context) {
+                    OpCode::GetIndex
+                } else {
+                    OpCode::GetGlobal(name)
+                }
+            } else if val_context::is_index(context) {
+                OpCode::GetIndex
             } else {
                 OpCode::GetLocal(i)
             }
+        } else if val_context::is_index(context) {
+            OpCode::GetIndex
         } else {
             OpCode::GetGlobal(name)
         };
@@ -990,12 +1092,12 @@ impl<'a> Compiler<'a> {
         self.add_code(code);
     }
 
-    fn group(&mut self) {
+    fn group(&mut self, _: bool) {
         self.expr();
         self.consume(Token::RightParen);
     }
 
-    fn unary(&mut self) {
+    fn unary(&mut self, _: bool) {
         let operator = self.prev().token;
         self.parse_precedence(Precedence::Unary);
 
@@ -1018,7 +1120,8 @@ impl<'a> Compiler<'a> {
             return;
         }
 
-        prefix.unwrap()(self);
+        let can_assign = prec <= Precedence::Assignment;
+        prefix.unwrap()(self, can_assign);
 
         while prec <= self.rule(&self.current().token).2 {
             self.advance();
@@ -1027,7 +1130,7 @@ impl<'a> Compiler<'a> {
                 return;
             }
 
-            inflix.unwrap()(self);
+            inflix.unwrap()(self, can_assign);
         }
     }
 
@@ -1057,7 +1160,7 @@ impl<'a> Compiler<'a> {
         argc
     }
 
-    fn binary(&mut self) {
+    fn binary(&mut self, _: bool) {
         let operator = self.prev().token;
         let precedence = self.rule(&operator).2;
 
@@ -1084,10 +1187,16 @@ impl<'a> Compiler<'a> {
         self.add_code(code);
     }
 
-    fn literal(&mut self) {
+    fn literal(&mut self, _: bool) {
         let code = match self.prev().token {
             Token::True => OpCode::Bool(Value::Bool(true)),
             Token::False => OpCode::Bool(Value::Bool(false)),
+            Token::LeftBracket => {
+                self.rollback();
+                let array_type = self.parse_type();
+                let len = self.parse_array_body();
+                OpCode::ArrayLiteral(len, array_type)
+            }
             _ => {
                 return;
             }
@@ -1096,9 +1205,28 @@ impl<'a> Compiler<'a> {
         self.add_code(code);
     }
 
-    fn call(&mut self) {
+    fn call(&mut self, _: bool) {
         let args = self.parse_args();
         self.add_code(OpCode::Call(args));
+    }
+
+    fn index(&mut self, assign: bool) {
+        let context = if assign {
+            val_context::ASSIGNMENT | val_context::INDEX
+        } else {
+            val_context::INDEX
+        };
+
+        // FIXME revisit this nested index counting
+        if val_context::is_assignment(context) {
+            self.index_depth += 1;
+        }
+
+        self.expr();
+        self.consume(Token::RightBracket);
+
+        self.named_var(context);
+        self.index_depth = 0;
     }
 
     fn add_code(&mut self, code: OpCode) -> usize {
@@ -1109,6 +1237,19 @@ impl<'a> Compiler<'a> {
         };
 
         self.cunit.chunk_mut().write(code, pos)
+    }
+
+    fn duplicate_codes(&mut self, last: usize) {
+        let len = self.cunit.chunk().codes().len();
+        let mut codes = vec![];
+        for i in 0..last {
+            let code = &self.cunit.chunk().codes()[len - i - 1];
+            codes.push(code.clone())
+        }
+        codes.reverse();
+        for code in codes {
+            self.add_code(code);
+        }
     }
 
     /// Remove last OpCode if it matches.
@@ -1158,6 +1299,7 @@ impl<'a> Compiler<'a> {
 #[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
 enum Precedence {
     None = 0,
+    Assignment,
     Or,
     And,
     Equality,
@@ -1166,13 +1308,15 @@ enum Precedence {
     Factor,
     Unary,
     Call,
+    Index,
     Primary,
 }
 
 impl Precedence {
     fn next(&self) -> Self {
         match self {
-            Self::None => Self::Or,
+            Self::None => Self::Assignment,
+            Self::Assignment => Self::Or,
             Self::Or => Self::And,
             Self::And => Self::Equality,
             Self::Equality => Self::Comparison,
@@ -1180,7 +1324,8 @@ impl Precedence {
             Self::Term => Self::Factor,
             Self::Factor => Self::Unary,
             Self::Unary => Self::Call,
-            Self::Call => Self::Primary,
+            Self::Call => Self::Index,
+            Self::Index => Self::Primary,
             Self::Primary => Self::Primary,
         }
     }
@@ -1231,3 +1376,19 @@ const ASSIGN_OPERATORS: [Token; 12] = [
 ];
 
 const INC_OPERATORS: [Token; 2] = [Token::Inc, Token::Dec];
+
+mod val_context {
+    pub type Context = u8;
+
+    pub const NONE: u8 = 0x00;
+    pub const ASSIGNMENT: u8 = 0x01;
+    pub const INDEX: u8 = 0x02;
+
+    pub fn is_assignment(context: Context) -> bool {
+        context & ASSIGNMENT == ASSIGNMENT
+    }
+
+    pub fn is_index(context: Context) -> bool {
+        context & INDEX == INDEX
+    }
+}

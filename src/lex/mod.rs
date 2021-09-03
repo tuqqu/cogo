@@ -428,6 +428,8 @@ impl<'a> Lexer<'a> {
             matches!(
                 l.token,
                 RightParen
+                    | RightCurlyBrace
+                    | RightBracket
                     | Inc
                     | Dec
                     | Return

@@ -9,7 +9,7 @@ use self::io::{StdStreamProvider, StreamProvider};
 use self::name_table::NameTable;
 use self::stack::VmStack;
 use crate::compiler::unit::{CompilationUnit as CUnit, FuncUnit};
-use crate::compiler::{OpCode, Value};
+use crate::compiler::{OpCode, ValType, Value};
 
 mod builtin;
 mod error;
@@ -17,6 +17,7 @@ pub mod io;
 mod name_table;
 mod stack;
 
+#[derive(Debug)]
 enum VmNamedValue {
     Var(Value),
     Const(Value),
@@ -41,7 +42,7 @@ impl VmNamedValue {
 type VmRuntimeCall = std::result::Result<(), VmError>;
 
 pub struct Vm {
-    globals: HashMap<String, VmNamedValue>,
+    globals: HashMap<String, VmNamedValue>, //FIXME use nametable
     names: NameTable<FuncUnit>,
     builtins: NameTable<FuncBuiltin>,
     std_streams: Box<dyn StreamProvider>,
@@ -216,9 +217,10 @@ impl Vm {
                                 val_type.name()
                             ))); //FIXME: err msg
                         }
+                        value.lose_literal(val_type);
+                    } else {
+                        value.lose_literal_blindly();
                     }
-
-                    value.lose_literal(val_type);
 
                     if self.globals.contains_key(&name) {
                         return Err(VmError::Compile(format!(
@@ -241,9 +243,11 @@ impl Vm {
                                 val_type.name()
                             ))); //FIXME: err msg
                         }
-                    }
 
-                    value.lose_literal(val_type);
+                        value.lose_literal(val_type);
+                    } else {
+                        value.lose_literal_blindly();
+                    }
 
                     if self.globals.contains_key(&name) {
                         return Err(VmError::Compile(format!(
@@ -276,6 +280,7 @@ impl Vm {
                     }
 
                     let value = self.stack.retrieve_mut();
+                    value.copy_if_soft_reference();
 
                     let old_v = self.globals.get_mut(&name).unwrap();
 
@@ -296,23 +301,27 @@ impl Vm {
                         ))); //FIXME: err msg
                     }
 
-                    value.lose_literal(Some(old_v.get_type()));
+                    value.lose_literal(&old_v.get_type());
                     *old_v = value.clone();
 
                     // no pop?
                 }
+                OpCode::LoseSoftReference => {
+                    let value = self.stack.retrieve_mut();
+                    value.copy_if_soft_reference();
+                }
                 OpCode::GetLocal(i) => {
                     let offset = self.current_frame().stack_pos;
                     let mut value = self.stack.retrieve_at(i + offset).clone();
-                    value.lose_literal(None);
+                    value.lose_literal_blindly();
                     self.stack.push(value);
                 }
                 OpCode::SetLocal(i) => {
                     let offset = self.current_frame().stack_pos;
                     let old_v = self.stack.retrieve_at(i + offset).clone();
                     let mut value = self.stack.retrieve().clone();
-
-                    value.lose_literal(Some(old_v.get_type()));
+                    value.lose_literal(&old_v.get_type());
+                    value.copy_if_soft_reference();
 
                     if !old_v.same_type(&value) {
                         return Err(VmError::Compile(format!(
@@ -328,6 +337,11 @@ impl Vm {
                     let val = self.stack.retrieve_by(argc as usize).clone();
                     match val {
                         Value::Func(name) => {
+                            for arg in 0..argc {
+                                let arg = self.stack.retrieve_by_mut(arg as usize);
+                                arg.copy_if_soft_reference();
+                            }
+
                             self.call_func(&name, argc)?;
                             self.current_frame_mut().inc_pointer(1);
                             self.current_frame += 1;
@@ -344,9 +358,55 @@ impl Vm {
                         } //FIXME display
                     }
                 }
+                OpCode::GetIndex => {
+                    let index = self.stack.pop()?;
+                    let array = self.stack.pop()?;
+                    if let Value::Array(array, ..) = array {
+                        if let Some(index) = index.to_usize() {
+                            let index = index as usize;
+                            let val = array.borrow_mut()[index].clone();
+                            self.stack.push(val);
+                        } else {
+                            return Err(VmError::Compile(format!(
+                                "Wrong index type \"{}\", expected integer.",
+                                index.get_type().name(),
+                            ))); //FIXME: err msg
+                        }
+                    }
+                }
+
+                OpCode::SetIndex => {
+                    let mut value = self.stack.pop()?;
+                    let index = self.stack.pop()?;
+                    let mut array = self.stack.pop()?;
+
+                    if let Value::Array(array, _, ValType::Array(ref vtype, ..)) = &mut array {
+                        if let Some(index) = index.to_usize() {
+                            let index = index as usize;
+                            value.lose_literal(vtype);
+                            if !value.is_of_type(vtype) {
+                                return Err(VmError::Compile(format!(
+                                    "Wrong type \"{}\", expected \"{}\".",
+                                    value.get_type().name(),
+                                    vtype.name()
+                                ))); //FIXME: err msg
+                            }
+                            array.borrow_mut()[index] = value;
+                        } else {
+                            return Err(VmError::Compile(format!(
+                                "Wrong index type \"{}\", expected integer.",
+                                index.get_type().name(),
+                            ))); //FIXME: err msg
+                        }
+                    } else {
+                        panic!("Expected array")
+                    }
+
+                    self.stack.push(array);
+                }
                 OpCode::ValidateTypeWithLiteralCast(val_type) => {
                     let val = self.stack.retrieve_mut();
-                    val.lose_literal(Some(val_type.clone()));
+                    val.lose_literal(&val_type);
 
                     if !val.is_of_type(&val_type) {
                         return Err(VmError::Compile(format!(
@@ -358,11 +418,40 @@ impl Vm {
                 }
                 OpCode::LiteralCast => {
                     let val = self.stack.retrieve_mut();
-                    val.lose_literal(None);
+                    val.lose_literal_blindly();
+                }
+                OpCode::ArrayLiteral(size, array_type) => {
+                    let mut vals = vec![];
+                    if let ValType::Array(vtype, type_size) = &array_type {
+                        if *type_size != size {
+                            return Err(VmError::Compile(format!(
+                                "Expected array of size \"{}\", got \"{}\".",
+                                type_size, size,
+                            ))); //FIXME: err msg
+                        }
+
+                        for _ in 0..size {
+                            let mut val = self.stack.pop()?;
+                            val.lose_literal(vtype);
+                            if !val.is_of_type(vtype) {
+                                return Err(VmError::Compile(format!(
+                                    "Wrong type \"{}\", expected \"{}\".",
+                                    val.get_type().name(),
+                                    vtype.name()
+                                ))); //FIXME: err msg
+                            }
+                            vals.push(val);
+                        }
+
+                        vals.reverse();
+                        self.stack.push(Value::new_array(vals, size, array_type));
+                    } else {
+                        panic!("Value is not of array type")
+                    }
                 }
                 OpCode::ValidateTypeAtWithLiteralCast(val_type, at) => {
                     let val = self.stack.retrieve_by_mut(at);
-                    val.lose_literal(Some(val_type.clone()));
+                    val.lose_literal(&val_type);
 
                     if !val.is_of_type(&val_type) {
                         return Err(VmError::Compile(format!(

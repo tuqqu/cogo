@@ -44,7 +44,7 @@ pub fn compare_stderr_output(program: &str, expected_stderr: &str) {
     let mut vm = Vm::new(Some(Box::new(stream_provider)), frame);
     let res = vm.run();
 
-    assert!(res.is_ok());
+    assert!(res.is_ok(), res.err().unwrap().to_string());
 
     let _out = &*vecout.borrow();
     let _out = String::from_utf8_lossy(_out);

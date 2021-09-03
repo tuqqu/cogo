@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::mem;
+use std::rc::Rc;
 
 use super::ValType;
 
@@ -31,15 +33,23 @@ pub enum Value {
     Func(String),
     FuncBuiltin(String),
 
+    Array(Array, usize, ValType),
+
     // Service values
     IntLiteral(isize),
     FloatLiteral(f64),
 }
 
+type Array = Rc<RefCell<Vec<Value>>>;
+
 pub struct TypeError(pub String); //FIXME: add proper error struct
 type OperationResult<T> = Result<T, TypeError>;
 
 impl Value {
+    pub fn new_array(vals: Vec<Self>, size: usize, vtype: ValType) -> Self {
+        Self::Array(Rc::new(RefCell::new(vals)), size, vtype)
+    }
+
     pub fn default(vtype: &ValType) -> Self {
         match vtype {
             ValType::Bool => Self::Bool(false),
@@ -59,43 +69,75 @@ impl Value {
             ValType::Complex64 => Self::Complex64(0_f32, 0_f32),
             ValType::Complex128 => Self::Complex128(0_f64, 0_f64),
             ValType::String => Self::String(String::from("")),
+            ValType::Array(vtype, size) => Self::new_array(
+                vec![Self::default(vtype); *size],
+                *size,
+                ValType::Array(Box::new(*vtype.clone()), *size),
+            ),
             _ => panic!("Cannot construct default value for type {}", vtype),
         }
     }
 
-    pub fn lose_literal(&mut self, vtype: Option<ValType>) {
+    #[allow(clippy::single_match)]
+    pub fn copy_if_soft_reference(&mut self) {
+        match self {
+            Self::Array(vals, size, vtype) => {
+                let vals = vals.as_ref().borrow().clone();
+                *self = Self::Array(Rc::new(RefCell::new(vals)), *size, vtype.clone());
+            }
+            _ => {}
+        };
+    }
+
+    pub fn to_usize(&self) -> Option<usize> {
+        match self {
+            Self::IntLiteral(v) if *v >= 0 => Some(*v as usize),
+            Self::Int(v) if *v >= 0 => Some(*v as usize),
+            Self::Int8(v) if *v >= 0 => Some(*v as usize),
+            Self::Int32(v) if *v >= 0 => Some(*v as usize),
+            Self::Int64(v) if *v >= 0 => Some(*v as usize),
+            Self::Uintptr(v) => Some(*v as usize),
+            Self::Uint(v) => Some(*v as usize),
+            Self::Uint8(v) => Some(*v as usize),
+            Self::Uint32(v) => Some(*v as usize),
+            Self::Uint64(v) => Some(*v as usize),
+            _ => None,
+        }
+    }
+
+    pub fn lose_literal_blindly(&mut self) {
+        match self {
+            Self::IntLiteral(v) => *self = Self::Int(*v),
+            Self::FloatLiteral(v) => *self = Self::Float64(*v),
+            _ => {}
+        }
+    }
+
+    pub fn lose_literal(&mut self, vtype: &ValType) {
         match self {
             Self::IntLiteral(v) => {
-                *self = if let Some(vtype) = vtype {
-                    match vtype {
-                        ValType::Int => Self::Int(*v),
-                        ValType::Int8 => Self::Int8(*v as i8),
-                        ValType::Int16 => Self::Int16(*v as i16),
-                        ValType::Int32 => Self::Int32(*v as i32),
-                        ValType::Int64 => Self::Int64(*v as i64),
-                        ValType::Uint => Self::Uint(*v as usize),
-                        ValType::Uint8 => Self::Uint8(*v as u8),
-                        ValType::Uint16 => Self::Uint16(*v as u16),
-                        ValType::Uint32 => Self::Uint32(*v as u32),
-                        ValType::Uint64 => Self::Uint64(*v as u64),
-                        ValType::Uintptr => Self::Uintptr(*v as usize),
-                        ValType::Float32 => Self::Float32(*v as f32),
-                        ValType::Float64 => Self::Float64(*v as f64),
-                        _ => panic!("Wrong type for integer literal"),
-                    }
-                } else {
-                    Self::Int(*v)
+                *self = match vtype {
+                    ValType::Int => Self::Int(*v),
+                    ValType::Int8 => Self::Int8(*v as i8),
+                    ValType::Int16 => Self::Int16(*v as i16),
+                    ValType::Int32 => Self::Int32(*v as i32),
+                    ValType::Int64 => Self::Int64(*v as i64),
+                    ValType::Uint => Self::Uint(*v as usize),
+                    ValType::Uint8 => Self::Uint8(*v as u8),
+                    ValType::Uint16 => Self::Uint16(*v as u16),
+                    ValType::Uint32 => Self::Uint32(*v as u32),
+                    ValType::Uint64 => Self::Uint64(*v as u64),
+                    ValType::Uintptr => Self::Uintptr(*v as usize),
+                    ValType::Float32 => Self::Float32(*v as f32),
+                    ValType::Float64 => Self::Float64(*v as f64),
+                    _ => panic!("Wrong type cast {} for integer literal", vtype),
                 }
             }
             Self::FloatLiteral(v) => {
-                *self = if let Some(vtype) = vtype {
-                    match vtype {
-                        ValType::Float32 => Self::Float32(*v as f32),
-                        ValType::Float64 => Self::Float64(*v),
-                        _ => panic!("Wrong type for float literal"),
-                    }
-                } else {
-                    Self::Float64(*v)
+                *self = match vtype {
+                    ValType::Float32 => Self::Float32(*v as f32),
+                    ValType::Float64 => Self::Float64(*v),
+                    _ => panic!("Wrong type cast {} for float literal", vtype),
                 }
             }
             _ => {}
@@ -446,7 +488,7 @@ impl Value {
 
     pub fn add(&mut self, other: &Self) -> OperationResult<()> {
         if self.is_literal() && !other.is_literal() {
-            self.lose_literal(Some(other.get_type()));
+            self.lose_literal(&other.get_type());
         }
 
         use Value::*;
@@ -511,7 +553,7 @@ impl Value {
 
     pub fn sub(&mut self, other: &Self) -> OperationResult<()> {
         if self.is_literal() && !other.is_literal() {
-            self.lose_literal(Some(other.get_type()));
+            self.lose_literal(&other.get_type());
         }
 
         use Value::*;
@@ -573,7 +615,7 @@ impl Value {
 
     pub fn mult(&mut self, other: &Self) -> OperationResult<()> {
         if self.is_literal() && !other.is_literal() {
-            self.lose_literal(Some(other.get_type()));
+            self.lose_literal(&other.get_type());
         }
 
         use Value::*;
@@ -635,7 +677,7 @@ impl Value {
 
     pub fn div(&mut self, other: &Self) -> OperationResult<()> {
         if self.is_literal() && !other.is_literal() {
-            self.lose_literal(Some(other.get_type()));
+            self.lose_literal(&other.get_type());
         }
 
         use Value::*;
@@ -697,7 +739,7 @@ impl Value {
 
     pub fn modulo(&mut self, other: &Self) -> OperationResult<()> {
         if self.is_literal() && !other.is_literal() {
-            self.lose_literal(Some(other.get_type()));
+            self.lose_literal(&other.get_type());
         }
 
         use Value::*;
@@ -1102,6 +1144,7 @@ impl Value {
             // Self::Func(f) => ValType::Func(), FIXME impl here a transformation of f -> ftype
             Self::IntLiteral(_) => ValType::Int,
             Self::FloatLiteral(_) => ValType::Float64,
+            Self::Array(.., vtype) => vtype.clone(),
             t => {
                 dbg!(t);
                 panic!("Unknown type")
@@ -1128,6 +1171,7 @@ impl Value {
                     | ValType::Uint64
                     | ValType::Uintptr
             ),
+            Self::Array(.., array_type) => array_type == v_type,
             _ => self.get_type() == *v_type,
         }
     }
@@ -1159,6 +1203,19 @@ impl Display for Value {
             Self::Complex64(c, i) => format!("({:e}+{:e}i)", c, i),
             Self::Complex128(c, i) => format!("({:e}+{:e}i)", c, i),
             Self::String(s) => s.clone(),
+            Self::Array(array, _size, vtype) => {
+                format!(
+                    "<{}>[{}]",
+                    vtype,
+                    array
+                        .as_ref()
+                        .borrow()
+                        .iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<String>>()
+                        .join(" ")
+                )
+            }
             //FIXME add function tostring (via internal id)
             t => {
                 dbg!(t);

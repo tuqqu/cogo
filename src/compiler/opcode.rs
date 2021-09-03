@@ -56,6 +56,7 @@ pub enum OpCode {
     // FIXME remove Value from here
     IntLiteral(Value),
     FloatLiteral(Value),
+    ArrayLiteral(usize, ValType),
 
     VarGlobal(String, Option<ValType>),
     ConstGlobal(String, Option<ValType>),
@@ -65,7 +66,11 @@ pub enum OpCode {
     GetLocal(usize),
     SetLocal(usize),
 
+    GetIndex,
+    SetIndex,
+
     LiteralCast,
+    LoseSoftReference,
     ValidateTypeWithLiteralCast(ValType),
     ValidateTypeAtWithLiteralCast(ValType, usize), //FIXME
     PutDefaultValue(ValType),
