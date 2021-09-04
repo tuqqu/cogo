@@ -36,8 +36,6 @@ pub fn compile(src: &str, err_handler: &mut dyn ErrorHandler) -> CUnitFrame {
         err_handler.on_error(errors);
     }
 
-    eprintln!("\x1b[0;34m{:#?}\x1b[0m", cunit.chunk());
-
     CUnitFrame::new(cunit)
 }
 
