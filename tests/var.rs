@@ -236,3 +236,44 @@ func main() {
         "57\nhi\nhey\nheya\n999\n0\n9\n1\n999\n0\n57\n100\n57\n",
     )
 }
+
+#[test]
+fn test_group_declarations() {
+    compare_stderr_output(
+        r#"
+package main
+
+var ()
+var (
+    x int8 = 1
+    y uint
+    z = "string"
+)
+
+const ()
+const (
+    A int = 3
+    E = 8
+)
+
+func main() {
+    println(x, y, z, A, E)
+
+    var ()
+    var (
+        a int8 = 9
+        s float32
+        d = "another"
+    )
+
+    const ()
+    const (
+        C int = 4
+        V = 5
+    )
+    println(a, s, d, C, V)
+}
+        "#,
+        "1 0 string 3 8\n9 0e0 another 4 5\n",
+    )
+}

@@ -111,12 +111,12 @@ impl<'a> Compiler<'a> {
         self.consume(Token::Semicolon);
     }
 
-    /// Various types of declarations
+    /// Various types of declarations (including group declarations)
     fn decl(&mut self) {
         if self.consume_if(Token::Var) {
-            self.decl_var();
+            self.decl_group_var();
         } else if self.consume_if(Token::Const) {
-            self.decl_const();
+            self.decl_group_const();
         } else if self.consume_if(Token::Func) {
             self.decl_func();
         } else {
@@ -125,6 +125,17 @@ impl<'a> Compiler<'a> {
 
         if self.panic {
             self.recover();
+        }
+    }
+
+    fn decl_group_var(&mut self) {
+        if self.consume_if(Token::LeftParen) {
+            while !self.consume_if(Token::RightParen) {
+                self.decl_var();
+            }
+            self.consume(Token::Semicolon);
+        } else {
+            self.decl_var();
         }
     }
 
@@ -180,6 +191,17 @@ impl<'a> Compiler<'a> {
             }
 
             self.scope.init_last();
+        }
+    }
+
+    fn decl_group_const(&mut self) {
+        if self.consume_if(Token::LeftParen) {
+            while !self.consume_if(Token::RightParen) {
+                self.decl_const();
+            }
+            self.consume(Token::Semicolon);
+        } else {
+            self.decl_const();
         }
     }
 
