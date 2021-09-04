@@ -2,6 +2,7 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValType {
+    Nil,
     Bool,
     Int8,
     Int16,
@@ -20,12 +21,14 @@ pub enum ValType {
     Complex128,
     String,
     Array(Box<Self>, usize),
+    Slice(Box<Self>),
     Func(Box<FuncType>),
     Struct(String),
 }
 
 impl ValType {
     // primitives
+    const TYPE_NIL: &'static str = "nil";
     const TYPE_BOOL: &'static str = "bool";
     const TYPE_INT8: &'static str = "int8";
     const TYPE_INT16: &'static str = "int16";
@@ -48,6 +51,7 @@ impl ValType {
 
     pub fn name(&self) -> String {
         match self {
+            Self::Nil => str::to_string(Self::TYPE_NIL),
             Self::Bool => str::to_string(Self::TYPE_BOOL),
             Self::Int8 => str::to_string(Self::TYPE_INT8),
             Self::Int16 => str::to_string(Self::TYPE_INT16),
@@ -66,6 +70,7 @@ impl ValType {
             Self::Complex128 => str::to_string(Self::TYPE_COMPLEX128),
             Self::String => str::to_string(Self::TYPE_STRING),
             Self::Array(vtype, size) => format!("[{}]{}", size, vtype),
+            Self::Slice(vtype) => format!("[]{}", vtype),
             Self::Func(f_type) => f_type.name(),
             Self::Struct(name) => str::to_string(name),
         }

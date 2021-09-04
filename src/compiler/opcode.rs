@@ -52,6 +52,7 @@ pub enum OpCode {
     IntLiteral(Value),
     FloatLiteral(Value),
     ArrayLiteral(usize, ValType),
+    SliceLiteral(usize, ValType),
 
     VarGlobal(String, Option<ValType>),
     ConstGlobal(String, Option<ValType>),

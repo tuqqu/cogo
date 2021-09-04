@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use super::ValType;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Bool(bool),
@@ -32,14 +33,16 @@ pub enum Value {
     Func(String),
     FuncBuiltin(String),
 
-    Array(Array, usize, ValType),
+    Array(RefIterator, usize, ValType),
+    Slice(RefIterator, ValType),
+    Nil,
 
     // Service values
     IntLiteral(isize),
     FloatLiteral(f64),
 }
 
-type Array = Rc<RefCell<Vec<Value>>>;
+pub type RefIterator = Rc<RefCell<Vec<Value>>>;
 
 pub struct TypeError(pub String); //FIXME: add proper error struct
 type OperationResult<T> = Result<T, TypeError>;
@@ -47,6 +50,10 @@ type OperationResult<T> = Result<T, TypeError>;
 impl Value {
     pub fn new_array(vals: Vec<Self>, size: usize, vtype: ValType) -> Self {
         Self::Array(Rc::new(RefCell::new(vals)), size, vtype)
+    }
+
+    pub fn new_slice(vals: Vec<Self>, vtype: ValType) -> Self {
+        Self::Slice(Rc::new(RefCell::new(vals)), vtype)
     }
 
     pub fn default(vtype: &ValType) -> Self {
@@ -73,6 +80,9 @@ impl Value {
                 *size,
                 ValType::Array(Box::new(*vtype.clone()), *size),
             ),
+            ValType::Slice(vtype) => {
+                Self::new_slice(vec![], ValType::Slice(Box::new(*vtype.clone())))
+            }
             _ => panic!("Cannot construct default value for type {}", vtype),
         }
     }
@@ -1123,6 +1133,7 @@ impl Value {
 
     pub fn get_type(&self) -> ValType {
         match self {
+            Self::Nil => ValType::Nil,
             Self::Bool(_) => ValType::Bool,
             Self::Int8(_) => ValType::Int8,
             Self::Int16(_) => ValType::Int16,
@@ -1144,6 +1155,7 @@ impl Value {
             Self::IntLiteral(_) => ValType::Int,
             Self::FloatLiteral(_) => ValType::Float64,
             Self::Array(.., vtype) => vtype.clone(),
+            Self::Slice(.., vtype) => vtype.clone(),
             t => {
                 dbg!(t);
                 panic!("Unknown type")
@@ -1151,13 +1163,13 @@ impl Value {
         }
     }
 
-    pub fn is_of_type(&self, v_type: &ValType) -> bool {
+    pub fn is_of_type(&self, vtype: &ValType) -> bool {
         match &self {
             //FIXME check
             Self::Func(_) => true,
-            Self::FloatLiteral(_) => matches!(v_type, ValType::Float32 | ValType::Float64),
+            Self::FloatLiteral(_) => matches!(vtype, ValType::Float32 | ValType::Float64),
             Self::IntLiteral(_) => matches!(
-                v_type,
+                vtype,
                 ValType::Int
                     | ValType::Int8
                     | ValType::Int16
@@ -1170,8 +1182,8 @@ impl Value {
                     | ValType::Uint64
                     | ValType::Uintptr
             ),
-            Self::Array(.., array_type) => array_type == v_type,
-            _ => self.get_type() == *v_type,
+            Self::Array(.., array_type) => array_type == vtype,
+            _ => self.get_type() == *vtype,
         }
     }
 
@@ -1183,6 +1195,7 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let val = match self {
+            Self::Nil => "nil".to_string(),
             Self::Bool(b) => b.to_string(),
             Self::Int8(i) => i.to_string(),
             Self::Int16(i) => i.to_string(),
@@ -1202,19 +1215,8 @@ impl Display for Value {
             Self::Complex64(c, i) => format!("({:e}+{:e}i)", c, i),
             Self::Complex128(c, i) => format!("({:e}+{:e}i)", c, i),
             Self::String(s) => s.clone(),
-            Self::Array(array, _size, vtype) => {
-                format!(
-                    "<{}>[{}]",
-                    vtype,
-                    array
-                        .as_ref()
-                        .borrow()
-                        .iter()
-                        .map(|v| v.to_string())
-                        .collect::<Vec<String>>()
-                        .join(" ")
-                )
-            }
+            Self::Array(iter, _size, vtype) => iter_to_string(iter, vtype),
+            Self::Slice(iter, vtype) => iter_to_string(iter, vtype),
             t => {
                 panic!("Unknown string type representation for value {}", t)
             }
@@ -1222,4 +1224,17 @@ impl Display for Value {
 
         write!(f, "{}", val)
     }
+}
+
+fn iter_to_string(iter: &RefIterator, vtype: &ValType) -> String {
+    format!(
+        "<{}>[{}]",
+        vtype,
+        iter.as_ref()
+            .borrow()
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<String>>()
+            .join(" ")
+    )
 }

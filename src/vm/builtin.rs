@@ -52,6 +52,7 @@ impl Vm {
         self.define_builtin("float32", Some(1), builtin_float32);
         self.define_builtin("float64", Some(1), builtin_float64);
         self.define_builtin("len", Some(1), builtin_len);
+        self.define_builtin("append", None, builtin_append);
     }
 
     fn define_builtin(&mut self, name: &'static str, argc: Option<u8>, func: Builtin) {
@@ -177,6 +178,7 @@ fn builtin_len(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let len = match v {
         Value::String(v) => v.len(),
         Value::Array(_, size, _) => *size,
+        Value::Slice(iter, _) => iter.borrow().len(),
         _ => {
             return Err(VmError::Compile(format!(
                 "Invalid argument type {}",
@@ -187,4 +189,28 @@ fn builtin_len(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
 
     // go specification dictates type int, not uint
     Ok(Some(Value::Int(len as isize)))
+}
+
+fn builtin_append(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
+    let v = argv.first().unwrap();
+    if let Value::Slice(slice, ValType::Slice(vtype)) = v {
+        for arg in argv.iter().skip(1) {
+            if !arg.is_of_type(vtype) {
+                return Err(VmError::Compile(format!(
+                    "Expected values of type {} to append, got {}",
+                    vtype,
+                    arg.get_type().name()
+                )));
+            }
+
+            slice.borrow_mut().push(arg.clone());
+        }
+    } else {
+        return Err(VmError::Compile(format!(
+            "Expected slice as the first argument, got {}",
+            v.get_type().name()
+        )));
+    }
+
+    Ok(Some(v.clone()))
 }

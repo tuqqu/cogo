@@ -8,7 +8,7 @@ use self::io::{StdStreamProvider, StreamProvider};
 use self::name_table::NameTable;
 use self::stack::VmStack;
 use crate::compiler::unit::{CompilationUnit as CUnit, FuncUnit};
-use crate::compiler::{OpCode, ValType, Value};
+use crate::compiler::{OpCode, RefIterator, ValType, Value};
 
 mod builtin;
 mod error;
@@ -360,45 +360,65 @@ impl Vm {
                 OpCode::GetIndex => {
                     let index = self.stack.pop()?;
                     let array = self.stack.pop()?;
+                    let index = if let Some(index) = index.to_usize() {
+                        index
+                    } else {
+                        return Err(VmError::Compile(format!(
+                            "Wrong index type \"{}\", expected integer.",
+                            index.get_type().name(),
+                        ))); //FIXME: err msg
+                    };
+
                     if let Value::Array(array, ..) = array {
-                        if let Some(index) = index.to_usize() {
-                            let index = index as usize;
-                            let val = array.borrow_mut()[index].clone();
-                            self.stack.push(val);
-                        } else {
-                            return Err(VmError::Compile(format!(
-                                "Wrong index type \"{}\", expected integer.",
-                                index.get_type().name(),
-                            ))); //FIXME: err msg
-                        }
+                        let val = array.borrow_mut()[index].clone();
+                        self.stack.push(val);
+                    } else if let Value::Slice(slice, _) = array {
+                        let val = slice.borrow_mut()[index].clone();
+                        self.stack.push(val);
+                    } else {
+                        panic!("Expected iterator, got type {}", array.get_type())
                     }
                 }
 
                 OpCode::SetIndex => {
-                    let mut value = self.stack.pop()?;
+                    let value = self.stack.pop()?;
                     let index = self.stack.pop()?;
                     let mut array = self.stack.pop()?;
 
-                    if let Value::Array(array, _, ValType::Array(ref vtype, ..)) = &mut array {
-                        if let Some(index) = index.to_usize() {
-                            let index = index as usize;
-                            value.lose_literal(vtype);
-                            if !value.is_of_type(vtype) {
-                                return Err(VmError::Compile(format!(
-                                    "Wrong type \"{}\", expected \"{}\".",
-                                    value.get_type().name(),
-                                    vtype.name()
-                                ))); //FIXME: err msg
-                            }
-                            array.borrow_mut()[index] = value;
-                        } else {
+                    let index = if let Some(index) = index.to_usize() {
+                        index
+                    } else {
+                        return Err(VmError::Compile(format!(
+                            "Wrong index type \"{}\", expected integer.",
+                            index.get_type().name(),
+                        ))); //FIXME: err msg
+                    };
+
+                    fn iter_set_index(
+                        iter: &mut RefIterator,
+                        i: usize,
+                        mut v: Value,
+                        vtype: &ValType,
+                    ) -> VmResult {
+                        v.lose_literal(vtype);
+                        if !v.is_of_type(vtype) {
                             return Err(VmError::Compile(format!(
-                                "Wrong index type \"{}\", expected integer.",
-                                index.get_type().name(),
+                                "Wrong type \"{}\", expected \"{}\".",
+                                v.get_type().name(),
+                                vtype.name()
                             ))); //FIXME: err msg
                         }
+                        iter.borrow_mut()[i] = v;
+
+                        Ok(())
+                    }
+
+                    if let Value::Array(array, _, ValType::Array(ref vtype, ..)) = &mut array {
+                        iter_set_index(array, index, value, vtype)?;
+                    } else if let Value::Slice(slice, ValType::Slice(ref vtype)) = &mut array {
+                        iter_set_index(slice, index, value, vtype)?;
                     } else {
-                        panic!("Expected array")
+                        panic!("Expected iterator, got type {}", array.get_type())
                     }
 
                     self.stack.push(array);
@@ -446,6 +466,28 @@ impl Vm {
                         self.stack.push(Value::new_array(vals, size, array_type));
                     } else {
                         panic!("Value is not of array type")
+                    }
+                }
+                OpCode::SliceLiteral(size, slice_type) => {
+                    let mut vals = vec![];
+                    if let ValType::Slice(vtype) = &slice_type {
+                        for _ in 0..size {
+                            let mut val = self.stack.pop()?;
+                            val.lose_literal(vtype);
+                            if !val.is_of_type(vtype) {
+                                return Err(VmError::Compile(format!(
+                                    "Wrong type \"{}\", expected \"{}\".",
+                                    val.get_type().name(),
+                                    vtype.name()
+                                ))); //FIXME: err msg
+                            }
+                            vals.push(val);
+                        }
+
+                        vals.reverse();
+                        self.stack.push(Value::new_slice(vals, slice_type));
+                    } else {
+                        panic!("Value is not of slice type")
                     }
                 }
                 OpCode::ValidateTypeAtWithLiteralCast(val_type, at) => {

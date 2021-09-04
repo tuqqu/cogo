@@ -6,7 +6,7 @@ use self::flow::ControlFlow;
 pub(crate) use self::opcode::OpCode;
 use self::scope::Scope;
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
-pub(crate) use self::value::{TypeError, Value};
+pub(crate) use self::value::{RefIterator, TypeError, Value};
 use self::vtype::FuncType;
 pub(crate) use self::vtype::ValType;
 use crate::lex::lexeme::{Lexeme, Token};
@@ -680,6 +680,16 @@ impl<'a> Compiler<'a> {
 
             Token::LeftBracket => {
                 self.advance();
+
+                // slice
+                if self.check(Token::RightBracket) {
+                    self.advance();
+                    let slice_type = self.parse_type();
+
+                    return ValType::Slice(Box::new(slice_type));
+                }
+
+                // array
                 let size = self.parse_constant_int();
                 self.consume(Token::RightBracket);
                 let array_type = self.parse_type();
@@ -703,7 +713,7 @@ impl<'a> Compiler<'a> {
         size
     }
 
-    /// For array literal bodies (the curly braced part of expressions like `[2]int{1, 2}`)
+    /// For array or slice literals (the curly braced part of expressions like `[2]int{1, 2}`)
     fn parse_array_body(&mut self) -> usize {
         self.consume(Token::LeftCurlyBrace);
 
@@ -1228,10 +1238,18 @@ impl<'a> Compiler<'a> {
             Token::True => OpCode::Bool(Value::Bool(true)),
             Token::False => OpCode::Bool(Value::Bool(false)),
             Token::LeftBracket => {
+                let code = if self.check(Token::RightBracket) {
+                    // slice
+                    OpCode::SliceLiteral
+                } else {
+                    // array
+                    OpCode::ArrayLiteral
+                };
+
                 self.rollback();
-                let array_type = self.parse_type();
+                let vtype = self.parse_type();
                 let len = self.parse_array_body();
-                OpCode::ArrayLiteral(len, array_type)
+                code(len, vtype)
             }
             _ => {
                 return;

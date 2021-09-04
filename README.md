@@ -9,24 +9,28 @@ A bytecode compiler and a virtual machine for a subset of Go, written in Rust
 package main
 
 var (
-    vec = [5]int{1, 2, 3, 4, 5}
-    q = 5
+    x uint8 = 255
+    vec     = []int{45, 23, -7, int(x), 0, -102}
 )
 
-func main() {    
-    if contains(vec, q) {
-        println("Value 5 is in the vector")
-    }
+func main() {
+    insertionSort(vec) // [-102 -7 0 23 45 255]
+    println("Vector is sorted.")
 }
 
-func contains(vec [5]int, val int) bool {
-    for i := 0; i < len(vec); i++ {
-        if vec[i] == val {
-            return true
+func insertionSort(vec []int) {
+    var n = len(vec)
+    for i := 1; i < n; i++ {
+        j := i
+        for j > 0 {
+            if vec[j-1] > vec[j] {
+                temp := vec[j]
+                vec[j] = vec[j-1]
+                vec[j-1] = temp
+            }
+            j--
         }
     }
-    
-    return false
 }
 ```
 
@@ -43,5 +47,6 @@ func contains(vec [5]int, val int) bool {
 - [x] functions (+ recursive calls)
 - [x] partial support of `builtin.go`
 - [x] arrays
+- [x] slices (partially)
 - [ ] closures
 - [ ] `range` and `for range` loops
