@@ -10,6 +10,17 @@ pub enum CompilationUnit {
 }
 
 impl CompilationUnit {
+    const PACKAGE: &'static str = "package";
+    const FUNCTION: &'static str = "function";
+
+    /// Used to output nicer compilation failure messages
+    pub(crate) fn cunit_type(&self) -> &str {
+        match &self {
+            Self::Package(_) => Self::PACKAGE,
+            Self::Function(_) => Self::FUNCTION,
+        }
+    }
+
     pub(crate) fn chunk(&self) -> &Chunk {
         match &self {
             Self::Package(p) => &p.codes,

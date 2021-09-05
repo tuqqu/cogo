@@ -38,7 +38,8 @@ impl VmNamedValue {
     }
 }
 
-type VmRuntimeCall = std::result::Result<(), VmError>;
+pub type VmResult<T> = result::Result<T, VmError>;
+type VmRuntimeCall<T> = std::result::Result<T, VmError>;
 
 pub struct Vm {
     globals: NameTable<VmNamedValue>,
@@ -69,7 +70,7 @@ impl Vm {
         vm
     }
 
-    pub fn run(&mut self) -> VmResult {
+    pub fn run(&mut self) -> VmResult<()> {
         let mut match_val: Option<Value> = None;
         let mut switches: VmStack<Switch> = VmStack::new();
 
@@ -84,7 +85,6 @@ impl Vm {
                 self.frames.pop()?;
                 continue;
             };
-            // eprintln!("\x1b[0;35m{:?}\x1b[0m", op_code);
 
             match op_code {
                 OpCode::Noop => {}
@@ -131,10 +131,7 @@ impl Vm {
                 OpCode::Return(void) => {
                     let val = if !void { Some(self.stack.pop()?) } else { None };
 
-                    if !self.return_conforms(&val) {
-                        panic!("error in return type");
-                    }
-
+                    self.validate_return_type(&val)?;
                     self.discard_frame_stack()?;
                     self.current_frame -= 1;
                     self.frames.pop()?;
@@ -142,21 +139,22 @@ impl Vm {
                     if !void {
                         self.stack.push(val.unwrap());
                     }
-
+                    // we don't want to increment the frame pointer
                     continue;
                 }
                 OpCode::Bool(v) | OpCode::String(v) => {
-                    self.stack.push(v.clone()); //FIXME clone
+                    self.stack.push(v);
                 }
                 OpCode::IntLiteral(v) | OpCode::FloatLiteral(v) => {
-                    self.stack.push(v.clone()); //FIXME clone
+                    self.stack.push(v);
                 }
                 OpCode::Func(funit) => {
                     if let CUnit::Function(func) = funit {
-                        self.names.insert(func.name().to_string(), func.clone())?;
-                        self.stack.push(Value::Func(func.name().to_string()));
+                        let func_name = func.name().to_string();
+                        self.names.insert(func_name.clone(), func)?;
+                        self.stack.push(Value::Func(func_name));
                     } else {
-                        panic!("func expected");
+                        error::panic_at_cunit_type(&funit);
                     }
                 }
                 OpCode::Not => {
@@ -204,60 +202,33 @@ impl Vm {
                 OpCode::Pop => {
                     self.stack.pop()?;
                 }
-                OpCode::VarGlobal(name, val_type) => {
-                    let value = self.stack.retrieve(); //FIXME improve message when void function result is used
-                    let mut value = value.clone();
-                    if let Some(val_type) = &val_type {
-                        if !value.is_of_type(val_type) {
-                            return Err(VmError::Compile(format!(
-                                "Got value of type \"{}\" but expected type \"{}\".",
-                                value.get_type().name(),
-                                val_type.name()
-                            ))); //FIXME: err msg
+                OpCode::VarGlobal(name, vtype) => {
+                    let mut value = self.stack.pop()?;
+                    if let Some(vtype) = &vtype {
+                        if !value.is_of_type(vtype) {
+                            return Err(VmError::type_error(vtype, &value.get_type()));
                         }
-                        value.lose_literal(val_type);
+                        value.lose_literal(vtype);
                     } else {
                         value.lose_literal_blindly();
-                    }
-
-                    if self.globals.has(&name) {
-                        return Err(VmError::Compile(format!(
-                            "Name \"{}\" already declared in this block.",
-                            name
-                        ))); //FIXME: err msg
                     }
 
                     self.globals
                         .insert(name.clone(), VmNamedValue::Var(value))?;
-                    self.stack.pop()?;
                 }
-                OpCode::ConstGlobal(name, val_type) => {
-                    let value = self.stack.retrieve();
-                    let mut value = value.clone();
-                    if let Some(val_type) = &val_type {
-                        if !value.is_of_type(val_type) {
-                            return Err(VmError::Compile(format!(
-                                "Got value of type \"{}\" but expected type \"{}\".",
-                                value.get_type().name(),
-                                val_type.name()
-                            ))); //FIXME: err msg
+                OpCode::ConstGlobal(name, vtype) => {
+                    let mut value = self.stack.pop()?;
+                    if let Some(vtype) = &vtype {
+                        if !value.is_of_type(vtype) {
+                            return Err(VmError::type_error(vtype, &value.get_type()));
                         }
-
-                        value.lose_literal(val_type);
+                        value.lose_literal(vtype);
                     } else {
                         value.lose_literal_blindly();
                     }
 
-                    if self.globals.has(&name) {
-                        return Err(VmError::Compile(format!(
-                            "Name \"{}\" already declared in this block.",
-                            name
-                        ))); //FIXME: err msg
-                    }
-
                     self.globals
                         .insert(name.clone(), VmNamedValue::Const(value))?;
-                    self.stack.pop()?;
                 }
                 OpCode::GetGlobal(name) => {
                     if let Ok(nval) = self.globals.get(&name) {
@@ -266,43 +237,30 @@ impl Vm {
                         let val = Value::FuncBuiltin(builtin.name().to_string());
                         self.stack.push(val);
                     } else {
-                        return Err(VmError::Compile(format!("Undefined \"{}\".", name)));
-                        //FIXME: err msg
+                        return Err(VmError::undefined(&name));
                     }
                 }
                 OpCode::SetGlobal(name) => {
                     if !self.globals.has(&name) {
-                        return Err(VmError::Compile(format!(
-                            "Name \"{}\" is not previously defined.",
-                            name
-                        ))); //FIXME: err msg
+                        return Err(VmError::undefined(&name));
                     }
 
                     let value = self.stack.retrieve_mut();
                     value.copy_if_soft_reference();
 
                     let old_v = self.globals.get_mut(&name)?;
-
                     if let VmNamedValue::Const(_) = old_v {
-                        return Err(VmError::Compile(format!(
-                            "Cannot mutate constant \"{}\".",
-                            name
-                        ))); //FIXME: err msg
+                        return Err(VmError::assignment(&name));
                     }
 
                     let old_v = old_v.val_mut();
                     // FIXME: maybe we should store types in a sep hashtable?
                     if !old_v.same_type(value) {
-                        return Err(VmError::Compile(format!(
-                            "Wrong type \"{}\", expected \"{}\".",
-                            value.get_type().name(),
-                            old_v.get_type().name()
-                        ))); //FIXME: err msg
+                        return Err(VmError::type_error(&old_v.get_type(), &value.get_type()));
                     }
 
                     value.lose_literal(&old_v.get_type());
                     *old_v = value.clone();
-
                     // no pop?
                 }
                 OpCode::LoseSoftReference => {
@@ -323,11 +281,7 @@ impl Vm {
                     value.copy_if_soft_reference();
 
                     if !old_v.same_type(&value) {
-                        return Err(VmError::Compile(format!(
-                            "Wrong type \"{}\", expected \"{}\".",
-                            value.get_type().name(),
-                            old_v.get_type().name()
-                        ))); //FIXME: err msg
+                        return Err(VmError::type_error(&old_v.get_type(), &value.get_type()));
                     }
 
                     self.stack.put_at(i + offset, value);
@@ -350,11 +304,8 @@ impl Vm {
                             self.call_builtin(&name, argc)?;
                         }
                         _ => {
-                            return Err(VmError::Runtime(format!(
-                                "Trying to call a non-callable value {:?}",
-                                val
-                            )))
-                        } //FIXME display
+                            return Err(VmError::callable_value_expected(&val.get_type()));
+                        }
                     }
                 }
                 OpCode::GetIndex => {
@@ -363,10 +314,7 @@ impl Vm {
                     let index = if let Some(index) = index.to_usize() {
                         index
                     } else {
-                        return Err(VmError::Compile(format!(
-                            "Wrong index type \"{}\", expected integer.",
-                            index.get_type().name(),
-                        ))); //FIXME: err msg
+                        return Err(VmError::index_type_error(&index.get_type()));
                     };
 
                     if let Value::Array(array, ..) = array {
@@ -376,22 +324,17 @@ impl Vm {
                         let val = slice.borrow_mut()[index].clone();
                         self.stack.push(val);
                     } else {
-                        panic!("Expected iterator, got type {}", array.get_type())
+                        return Err(VmError::iterator_value_expected(&array.get_type()));
                     }
                 }
-
                 OpCode::SetIndex => {
                     let value = self.stack.pop()?;
                     let index = self.stack.pop()?;
                     let mut array = self.stack.pop()?;
-
                     let index = if let Some(index) = index.to_usize() {
                         index
                     } else {
-                        return Err(VmError::Compile(format!(
-                            "Wrong index type \"{}\", expected integer.",
-                            index.get_type().name(),
-                        ))); //FIXME: err msg
+                        return Err(VmError::index_type_error(&index.get_type()));
                     };
 
                     fn iter_set_index(
@@ -399,14 +342,10 @@ impl Vm {
                         i: usize,
                         mut v: Value,
                         vtype: &ValType,
-                    ) -> VmResult {
+                    ) -> VmResult<()> {
                         v.lose_literal(vtype);
                         if !v.is_of_type(vtype) {
-                            return Err(VmError::Compile(format!(
-                                "Wrong type \"{}\", expected \"{}\".",
-                                v.get_type().name(),
-                                vtype.name()
-                            ))); //FIXME: err msg
+                            return Err(VmError::type_error(vtype, &v.get_type()));
                         }
                         iter.borrow_mut()[i] = v;
 
@@ -418,21 +357,17 @@ impl Vm {
                     } else if let Value::Slice(slice, ValType::Slice(ref vtype)) = &mut array {
                         iter_set_index(slice, index, value, vtype)?;
                     } else {
-                        panic!("Expected iterator, got type {}", array.get_type())
+                        return Err(VmError::iterator_value_expected(&array.get_type()));
                     }
 
                     self.stack.push(array);
                 }
-                OpCode::ValidateTypeWithLiteralCast(val_type) => {
+                OpCode::ValidateTypeWithLiteralCast(vtype) => {
                     let val = self.stack.retrieve_mut();
-                    val.lose_literal(&val_type);
+                    val.lose_literal(&vtype);
 
-                    if !val.is_of_type(&val_type) {
-                        return Err(VmError::Compile(format!(
-                            "Wrong type \"{}\", expected \"{}\".",
-                            val.get_type().name(),
-                            val_type.name()
-                        ))); //FIXME: err msg
+                    if !val.is_of_type(&vtype) {
+                        return Err(VmError::type_error(&vtype, &val.get_type()));
                     }
                 }
                 OpCode::LiteralCast => {
@@ -443,21 +378,14 @@ impl Vm {
                     let mut vals = vec![];
                     if let ValType::Array(vtype, type_size) = &array_type {
                         if *type_size != size {
-                            return Err(VmError::Compile(format!(
-                                "Expected array of size \"{}\", got \"{}\".",
-                                type_size, size,
-                            ))); //FIXME: err msg
+                            return Err(VmError::wrong_array_size(*type_size, size));
                         }
 
                         for _ in 0..size {
                             let mut val = self.stack.pop()?;
                             val.lose_literal(vtype);
                             if !val.is_of_type(vtype) {
-                                return Err(VmError::Compile(format!(
-                                    "Wrong type \"{}\", expected \"{}\".",
-                                    val.get_type().name(),
-                                    vtype.name()
-                                ))); //FIXME: err msg
+                                return Err(VmError::type_error(vtype, &val.get_type()));
                             }
                             vals.push(val);
                         }
@@ -465,7 +393,7 @@ impl Vm {
                         vals.reverse();
                         self.stack.push(Value::new_array(vals, size, array_type));
                     } else {
-                        panic!("Value is not of array type")
+                        return Err(VmError::incorrectly_typed("array literal", &array_type));
                     }
                 }
                 OpCode::SliceLiteral(size, slice_type) => {
@@ -475,11 +403,7 @@ impl Vm {
                             let mut val = self.stack.pop()?;
                             val.lose_literal(vtype);
                             if !val.is_of_type(vtype) {
-                                return Err(VmError::Compile(format!(
-                                    "Wrong type \"{}\", expected \"{}\".",
-                                    val.get_type().name(),
-                                    vtype.name()
-                                ))); //FIXME: err msg
+                                return Err(VmError::type_error(vtype, &val.get_type()));
                             }
                             vals.push(val);
                         }
@@ -487,19 +411,14 @@ impl Vm {
                         vals.reverse();
                         self.stack.push(Value::new_slice(vals, slice_type));
                     } else {
-                        panic!("Value is not of slice type")
+                        return Err(VmError::incorrectly_typed("slice literal", &slice_type));
                     }
                 }
-                OpCode::ValidateTypeAtWithLiteralCast(val_type, at) => {
+                OpCode::ValidateTypeAtWithLiteralCast(vtype, at) => {
                     let val = self.stack.retrieve_by_mut(at);
-                    val.lose_literal(&val_type);
-
-                    if !val.is_of_type(&val_type) {
-                        return Err(VmError::Compile(format!(
-                            "Wrong type \"{}\", expected \"{}\".",
-                            val.get_type().name(),
-                            val_type.name()
-                        ))); //FIXME: err msg
+                    val.lose_literal(&vtype);
+                    if !val.is_of_type(&vtype) {
+                        return Err(VmError::type_error(&vtype, &val.get_type()));
                     }
                 }
                 OpCode::PutDefaultValue(val_type) => {
@@ -513,11 +432,8 @@ impl Vm {
                         }
                         Value::Bool(true) => {}
                         val => {
-                            return Err(VmError::Compile(format!(
-                                "Wrong type \"{}\" in if condition, expected \"bool\".",
-                                val.get_type().name()
-                            )))
-                        } //FIXME: err msg
+                            return Err(VmError::non_bool_in_condition(&val.get_type()));
+                        }
                     }
                 }
                 OpCode::Jump(j) => {
@@ -580,10 +496,10 @@ impl Vm {
                                 Value::Bool(false) => {
                                     self.current_frame_mut().inc_pointer(j);
                                 }
-                                _ => panic!("Unexpected matching result."),
+                                _ => return Err(VmError::unexpected_matching_result()),
                             }
                         } else {
-                            panic!("No matching value found.");
+                            return Err(VmError::non_exhaustive_matching_result());
                         }
                     } else {
                         last.fall_flag = false;
@@ -597,14 +513,10 @@ impl Vm {
         VmResult::Ok(())
     }
 
-    fn call_func(&mut self, name: &str, argc: u8) -> VmRuntimeCall {
+    fn call_func(&mut self, name: &str, argc: u8) -> VmRuntimeCall<()> {
         let f = self.names.get(name)?;
         if argc as usize != f.param_names().len() {
-            return Err(VmError::Runtime(format!(
-                "Expected {} params, got {}",
-                f.param_names().len(),
-                argc
-            ))); //FIXME display
+            return Err(VmError::mismatched_argc(f.param_names().len(), argc));
         }
 
         let mut frame = CUnitFrame::new(CUnit::Function(f.clone()));
@@ -614,17 +526,14 @@ impl Vm {
         Ok(())
     }
 
-    fn call_builtin(&mut self, name: &str, argc: u8) -> VmRuntimeCall {
+    fn call_builtin(&mut self, name: &str, argc: u8) -> VmRuntimeCall<()> {
         let f = self.builtins.get(name)?;
         let len = self.stack.len();
         let stack_pos = len - argc as usize;
 
         if let Some(fargc) = f.argc() {
             if *fargc != argc {
-                return Err(VmError::Runtime(format!(
-                    "Expected {} params, got {}",
-                    fargc, argc
-                ))); //FIXME display
+                return Err(VmError::mismatched_argc(*fargc as usize, argc));
             }
         }
 
@@ -651,7 +560,7 @@ impl Vm {
         last_frame.borrow_mut()
     }
 
-    fn discard_frame_stack(&mut self) -> VmResult {
+    fn discard_frame_stack(&mut self) -> VmResult<()> {
         if self.stack.len() != 0 {
             while self.stack.len() >= self.current_frame().stack_pos {
                 self.stack.pop()?;
@@ -661,19 +570,29 @@ impl Vm {
         Ok(())
     }
 
-    fn return_conforms(&self, val: &Option<Value>) -> bool {
-        match &self.current_frame().cunit {
-            CUnit::Function(funit) => match (funit.ret_type(), val) {
-                (Some(v_type), Some(val)) => val.is_of_type(v_type),
-                (None, None) => true,
-                _ => false,
-            },
-            _ => panic!("Wrong cunit type"),
+    fn validate_return_type(&self, val: &Option<Value>) -> VmResult<()> {
+        let cunit = &self.current_frame().cunit;
+        if let CUnit::Function(funit) = cunit {
+            match (funit.ret_type(), val) {
+                (Some(vtype), Some(val)) => {
+                    if val.is_of_type(vtype) {
+                        Ok(())
+                    } else {
+                        Err(VmError::return_type_error(
+                            Some(vtype),
+                            Some(&val.get_type()),
+                        ))
+                    }
+                }
+                (None, None) => Ok(()),
+                (None, Some(val)) => Err(VmError::return_type_error(None, Some(&val.get_type()))),
+                (Some(vtype), None) => Err(VmError::return_type_error(Some(vtype), None)),
+            }
+        } else {
+            error::panic_at_cunit_type(cunit);
         }
     }
 }
-
-pub type VmResult = result::Result<(), VmError>;
 
 struct Switch {
     matched: bool,

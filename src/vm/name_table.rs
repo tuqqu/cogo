@@ -19,7 +19,7 @@ impl<N> NameTable<N> {
 
     pub(super) fn insert(&mut self, name: String, value: N) -> NameResult<()> {
         if self.0.contains_key(&name) {
-            return Err(NameError(format!("Name {} already exists", name)));
+            return Err(NameError(format!("Name {} already declared", name)));
         }
 
         self.0.insert(name, value);
