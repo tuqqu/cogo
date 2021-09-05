@@ -330,6 +330,7 @@ impl<'a> Compiler<'a> {
                 | Token::Uintptr
                 | Token::Float32
                 | Token::Float64
+                | Token::String
         ) {
             t = &Token::Identifier
         };

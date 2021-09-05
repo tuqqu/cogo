@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use std::io::Write;
-use std::result;
+use std::{char, result};
 
 use super::error::VmError;
 use super::io::StreamProvider;
@@ -51,6 +51,7 @@ impl Vm {
         self.define_builtin("uint64", Some(1), builtin_uint64);
         self.define_builtin("float32", Some(1), builtin_float32);
         self.define_builtin("float64", Some(1), builtin_float64);
+        self.define_builtin("string", Some(1), builtin_string);
         self.define_builtin("len", Some(1), builtin_len);
         self.define_builtin("append", None, builtin_append);
     }
@@ -166,12 +167,36 @@ fn builtin_float64(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     Ok(Some(v))
 }
 
-//FIXME
-// fn builtin_string(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
-//     let v = argv.first().unwrap();
-//     let v = v.cast_to(ValType::String);
-//     Some(v)
-// }
+fn builtin_string(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
+    let v = argv.first().unwrap();
+    let v = match v {
+        Value::String(v) => v.clone(),
+        Value::Slice(iter, ValType::Slice(vtype))
+            if matches!(**vtype, ValType::Int32 | ValType::Uint8) =>
+        {
+            let chars: String = iter
+                .as_ref()
+                .borrow()
+                .iter()
+                .map(|v| unsafe { char::from_u32_unchecked(v.to_usize().unwrap() as u32) })
+                .collect();
+            chars
+        }
+        _ => {
+            if let Some(int) = v.to_usize() {
+                unsafe { char::from_u32_unchecked(int as u32).to_string() }
+            } else {
+                return Err(VmError::invalid_argument(
+                    "uint8 slice, int32 slice, string or integer",
+                    &v.get_type(),
+                    1,
+                ));
+            }
+        }
+    };
+
+    Ok(Some(Value::String(v)))
+}
 
 fn builtin_len(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
@@ -180,10 +205,11 @@ fn builtin_len(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
         Value::Array(_, size, _) => *size,
         Value::Slice(iter, _) => iter.borrow().len(),
         _ => {
-            return Err(VmError::Compile(format!(
-                "Invalid argument type {}",
-                v.get_type().name()
-            )))
+            return Err(VmError::invalid_argument(
+                "string, array, slice",
+                &v.get_type(),
+                1,
+            ));
         }
     };
 
@@ -194,22 +220,15 @@ fn builtin_len(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
 fn builtin_append(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     if let Value::Slice(slice, ValType::Slice(vtype)) = v {
-        for arg in argv.iter().skip(1) {
+        for (i, arg) in argv.iter().skip(1).enumerate() {
             if !arg.is_of_type(vtype) {
-                return Err(VmError::Compile(format!(
-                    "Expected values of type {} to append, got {}",
-                    vtype,
-                    arg.get_type().name()
-                )));
+                return Err(VmError::invalid_argument(vtype, &arg.get_type(), i as u8));
             }
 
             slice.borrow_mut().push(arg.clone());
         }
     } else {
-        return Err(VmError::Compile(format!(
-            "Expected slice as the first argument, got {}",
-            v.get_type().name()
-        )));
+        return Err(VmError::invalid_argument("slice", &v.get_type(), 1));
     }
 
     Ok(Some(v.clone()))

@@ -413,7 +413,7 @@ impl<'a> Lexer<'a> {
             "complex64" => (Complex64, false),
             "complex128" => (Complex128, false),
 
-            "string" => (String, false),
+            "string" => (String, true),
 
             _ => return None,
         };

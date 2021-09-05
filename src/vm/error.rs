@@ -24,8 +24,18 @@ impl VmError {
     pub(super) fn type_error(expected: &ValType, actual: &ValType) -> Self {
         Self::Runtime(format!(
             "Got value of type \"{}\" but expected type \"{}\"",
-            actual.name(),
-            expected.name(),
+            actual, expected,
+        ))
+    }
+
+    pub(super) fn invalid_argument<T>(expected: &T, actual: &ValType, n: u8) -> Self
+    where
+        T: fmt::Display,
+        T: ?Sized,
+    {
+        Self::Runtime(format!(
+            "Invalid argument {} type \"{}\", expected \"{}\"",
+            n, actual, expected,
         ))
     }
 
@@ -34,10 +44,9 @@ impl VmError {
         let msg = match (expected, actual) {
             (Some(expected), Some(actual)) => format!(
                 "Function must return \"{}\", got type \"{}\".",
-                expected.name(),
-                actual.name(),
+                expected, actual,
             ),
-            (Some(expected), None) => format!("Function must return \"{}\".", expected.name()),
+            (Some(expected), None) => format!("Function must return \"{}\".", expected),
             (None, _) => "Function must not return value.".to_string(),
         };
 
@@ -49,7 +58,7 @@ impl VmError {
     pub(super) fn non_bool_in_condition(actual: &ValType) -> Self {
         Self::Runtime(format!(
             "Type \"{}\" used in condition, expected \"bool\"",
-            actual.name(),
+            actual,
         ))
     }
 
@@ -58,7 +67,7 @@ impl VmError {
     pub(super) fn index_type_error(actual: &ValType) -> Self {
         Self::Runtime(format!(
             "Indices must be of integer types, got \"{}\"",
-            actual.name(),
+            actual,
         ))
     }
 
@@ -92,21 +101,20 @@ impl VmError {
     // Having them simply means there is an error in the compiler logic
 
     pub(super) fn iterator_value_expected(actual: &ValType) -> Self {
-        Self::Compile(format!("Expected iterator, got type {}", actual.name(),))
+        Self::Compile(format!("Expected iterator, got type {}", actual,))
     }
 
     pub(super) fn callable_value_expected(actual: &ValType) -> Self {
         Self::Compile(format!(
             "Trying to call a non-callable value \"{}\"",
-            actual.name(),
+            actual,
         ))
     }
 
     pub(super) fn incorrectly_typed(what: &str, actual: &ValType) -> Self {
         Self::Compile(format!(
             "Value of {} is wrongly typed: \"{}\"",
-            what,
-            actual.name()
+            what, actual
         ))
     }
 
