@@ -1,13 +1,14 @@
 use std::mem;
 
 use self::error::CompileError;
+pub(crate) use self::error::TypeError;
 pub use self::error::{ErrorHandler, ToStderrErrorHandler};
 use self::flow::ControlFlow;
 pub(crate) use self::opcode::OpCode;
 use self::scope::Scope;
 use self::structure::{EntryPoint, Function, Package};
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
-pub(crate) use self::value::{RefIterator, TypeError, Value};
+pub(crate) use self::value::{RefIterator, Value};
 use self::vtype::FuncType;
 pub(crate) use self::vtype::ValType;
 use crate::lex::lexeme::{Lexeme, Token};

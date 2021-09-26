@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::mem;
 use std::rc::Rc;
 
-use super::ValType;
+use super::{TypeError, ValType};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
@@ -44,7 +44,6 @@ pub enum Value {
 
 pub type RefIterator = Rc<RefCell<Vec<Value>>>;
 
-pub struct TypeError(pub String); //FIXME: add proper error struct
 type OperationResult<T> = Result<T, TypeError>;
 
 impl Value {
@@ -208,15 +207,7 @@ impl Value {
             Int8(_) | Int16(_) | Int32(_) | Int64(_) | Int(_) | Uint8(_) | Uint16(_)
             | Uint32(_) | Uint64(_) | Uintptr(_) | Uint(_) | IntLiteral(_) | Float32(_)
             | Float64(_) | FloatLiteral(_) | Complex64(..) | Complex128(..) => {}
-            a => {
-                return Err(TypeError(
-                    //FIXME: add proper error message (types etc)
-                    format!(
-                        "Operand must be of number type, got \"{}\"",
-                        a.get_type().name(),
-                    ),
-                ));
-            }
+            a => return Err(TypeError::wrong_operand_type("number", &a.get_type())),
         };
 
         Ok(())
@@ -248,15 +239,7 @@ impl Value {
                 *a = -*a;
                 *a_i = -*a_i;
             }
-            a => {
-                return Err(TypeError(
-                    //FIXME: add proper error message (types etc)
-                    format!(
-                        "Operand must be of number type, got \"{}\"",
-                        a.get_type().name(),
-                    ),
-                ));
-            }
+            a => return Err(TypeError::wrong_operand_type("number", &a.get_type())),
         };
 
         Ok(())
@@ -315,12 +298,10 @@ impl Value {
                 *lhs = format!("{}{}", lhs, rhs);
             }
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -377,12 +358,10 @@ impl Value {
                 *lhs_i -= *rhs_i;
             }
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -439,12 +418,10 @@ impl Value {
                 *lhs_i *= *rhs_i;
             }
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -501,12 +478,10 @@ impl Value {
                 *lhs_i /= *rhs_i;
             }
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -563,12 +538,10 @@ impl Value {
                 *lhs_i %= *rhs_i;
             }
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -581,13 +554,7 @@ impl Value {
             Bool(a) => {
                 *a = !*a;
             }
-            a => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Operand must be of type bool, got \"{}\"",
-                    a.get_type().name()
-                )));
-            }
+            a => return Err(TypeError::wrong_operand_type("bool", &a.get_type())),
         };
 
         Ok(())
@@ -635,11 +602,10 @@ impl Value {
 
             _ => {
                 if mem::discriminant(self) != mem::discriminant(other) {
-                    return Err(TypeError(format!(
-                        "Both operands must be of same types, got \"{}\" and \"{}\"",
-                        self.get_type().name(),
-                        other.get_type().name(),
-                    )));
+                    return Err(TypeError::expected_same_type_operands(
+                        &self.get_type(),
+                        &other.get_type(),
+                    ));
                 }
 
                 Value::Bool(self == other)
@@ -700,12 +666,10 @@ impl Value {
             (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Bool(lhs > rhs && lhs_i > rhs_i),
             (String(lhs), String(rhs)) => Bool(lhs > rhs),
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -762,12 +726,10 @@ impl Value {
             (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Bool(lhs >= rhs && lhs_i >= rhs_i),
             (String(lhs), String(rhs)) => Bool(lhs >= rhs),
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -824,12 +786,10 @@ impl Value {
             (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Bool(lhs < rhs && lhs_i < rhs_i),
             (String(lhs), String(rhs)) => Bool(lhs < rhs),
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -886,12 +846,10 @@ impl Value {
             (Complex128(lhs, lhs_i), Complex128(rhs, rhs_i)) => Bool(lhs <= rhs && lhs_i <= rhs_i),
             (String(lhs), String(rhs)) => Bool(lhs <= rhs),
             (lhs, rhs) => {
-                //FIXME: add proper error message (types etc)
-                return Err(TypeError(format!(
-                    "Both operands must be of same types, got \"{}\" and \"{}\"",
-                    lhs.get_type().name(),
-                    rhs.get_type().name(),
-                )));
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
             }
         };
 
@@ -918,7 +876,6 @@ impl Value {
             Self::Complex64(..) => ValType::Complex64,
             Self::Complex128(..) => ValType::Complex128,
             Self::String(_) => ValType::String,
-            // Self::Func(f) => ValType::Func(), FIXME impl here a transformation of f -> ftype
             Self::IntLiteral(_) => ValType::Int,
             Self::FloatLiteral(_) => ValType::Float64,
             Self::Array(.., vtype) => vtype.clone(),
