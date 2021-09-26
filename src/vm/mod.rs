@@ -150,7 +150,7 @@ impl Vm {
                 }
                 OpCode::Func(funit) => {
                     if let CUnit::Function(func) = funit {
-                        let func_name = func.name().to_string();
+                        let func_name = func.function().0.to_string();
                         self.names.insert(func_name.clone(), func)?;
                         self.stack.push(Value::Func(func_name));
                     } else {
@@ -362,15 +362,14 @@ impl Vm {
 
                     self.stack.push(array);
                 }
-                OpCode::ValidateTypeWithLiteralCast(vtype) => {
+                OpCode::TypeValidation(vtype) => {
                     let val = self.stack.retrieve_mut();
                     val.lose_literal(&vtype);
-
                     if !val.is_of_type(&vtype) {
                         return Err(VmError::type_error(&vtype, &val.get_type()));
                     }
                 }
-                OpCode::LiteralCast => {
+                OpCode::BlindLiteralCast => {
                     let val = self.stack.retrieve_mut();
                     val.lose_literal_blindly();
                 }
@@ -414,7 +413,7 @@ impl Vm {
                         return Err(VmError::incorrectly_typed("slice literal", &slice_type));
                     }
                 }
-                OpCode::ValidateTypeAtWithLiteralCast(vtype, at) => {
+                OpCode::TypeValidationAt(vtype, at) => {
                     let val = self.stack.retrieve_by_mut(at);
                     val.lose_literal(&vtype);
                     if !val.is_of_type(&vtype) {
@@ -463,16 +462,6 @@ impl Vm {
                     let mut last = switches.last_mut();
                     last.jump_from_case = true;
                 }
-                OpCode::Fallthrough => {
-                    let mut last = switches.last_mut();
-                    last.jump_from_case = false;
-                    last.fall_flag = true;
-                }
-                OpCode::Switch => {
-                    let val = self.stack.pop()?;
-                    match_val = Some(val);
-                    switches.push(Switch::new());
-                }
                 OpCode::DefaultCaseJump(j) => {
                     let mut last = switches.last_mut();
                     if !last.fall_flag {
@@ -504,6 +493,16 @@ impl Vm {
                     } else {
                         last.fall_flag = false;
                     }
+                }
+                OpCode::Fallthrough => {
+                    let mut last = switches.last_mut();
+                    last.jump_from_case = false;
+                    last.fall_flag = true;
+                }
+                OpCode::Switch => {
+                    let val = self.stack.pop()?;
+                    match_val = Some(val);
+                    switches.push(Switch::new());
                 }
             }
 

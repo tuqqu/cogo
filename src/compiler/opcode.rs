@@ -65,10 +65,10 @@ pub enum OpCode {
     GetIndex,
     SetIndex,
 
-    LiteralCast,
+    BlindLiteralCast,
     LoseSoftReference,
-    ValidateTypeWithLiteralCast(ValType),
-    ValidateTypeAtWithLiteralCast(ValType, usize), //FIXME
+    TypeValidation(ValType),
+    TypeValidationAt(ValType, usize), //FIXME
     PutDefaultValue(ValType),
 }
 

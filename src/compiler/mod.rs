@@ -5,6 +5,7 @@ pub use self::error::{ErrorHandler, ToStderrErrorHandler};
 use self::flow::ControlFlow;
 pub(crate) use self::opcode::OpCode;
 use self::scope::Scope;
+use self::structure::{EntryPoint, Function, Package};
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
 pub(crate) use self::value::{RefIterator, TypeError, Value};
 use self::vtype::FuncType;
@@ -17,6 +18,7 @@ pub(crate) mod error;
 mod flow;
 mod opcode;
 mod scope;
+mod structure;
 pub(crate) mod unit;
 mod value;
 mod vtype;
@@ -49,6 +51,7 @@ struct Compiler<'a> {
     control_flow: ControlFlow,
     cur_package: Option<Package>,
     index_depth: usize,
+    entry_point: EntryPoint,
 }
 
 type ParseCallback<T> = fn(&mut T, bool);
@@ -70,6 +73,7 @@ impl<'a> Compiler<'a> {
             control_flow: ControlFlow::new(),
             cur_package: None,
             index_depth: 0,
+            entry_point: EntryPoint::new(Package("main".to_string()), Function("main".to_string())),
         }
     }
 
@@ -97,8 +101,9 @@ impl<'a> Compiler<'a> {
         if self.consume_if(Token::Package) {
             let name = self.parse_name().to_string();
             if let CUnit::Package(p) = &mut self.cunit {
-                p.set_name(name.clone());
-                self.cur_package = Some(Package(name));
+                let package = Package(name);
+                p.set_package(package.clone());
+                self.cur_package = Some(package);
             } else {
                 panic!("Compiling did not start with a package");
             }
@@ -172,20 +177,20 @@ impl<'a> Compiler<'a> {
     }
 
     //FIXME change flags
-    fn def_var(&mut self, name: String, val_type: Option<ValType>, validate: bool, litcast: bool) {
+    fn def_var(&mut self, name: String, vtype: Option<ValType>, validate: bool, litcast: bool) {
         if self.is_global_scope() {
-            self.add_code(OpCode::VarGlobal(name, val_type));
+            self.add_code(OpCode::VarGlobal(name, vtype));
         } else {
             //FIXME change logic
             if validate {
-                if let Some(val_type) = val_type {
-                    self.add_code(OpCode::ValidateTypeWithLiteralCast(val_type));
+                if let Some(vtype) = vtype {
+                    self.add_code(OpCode::TypeValidation(vtype));
                 } else if litcast {
-                    self.add_code(OpCode::LiteralCast);
+                    self.add_code(OpCode::BlindLiteralCast);
                 }
             } else if litcast {
                 self.add_code(OpCode::LoseSoftReference);
-                self.add_code(OpCode::LiteralCast);
+                self.add_code(OpCode::BlindLiteralCast);
             }
 
             self.scope.init_last();
@@ -220,9 +225,9 @@ impl<'a> Compiler<'a> {
             self.add_code(OpCode::ConstGlobal(name, vtype));
         } else {
             if let Some(vtype) = vtype {
-                self.add_code(OpCode::ValidateTypeWithLiteralCast(vtype));
+                self.add_code(OpCode::TypeValidation(vtype));
             } else {
-                self.add_code(OpCode::LiteralCast);
+                self.add_code(OpCode::BlindLiteralCast);
             }
 
             self.scope.init_last();
@@ -233,11 +238,11 @@ impl<'a> Compiler<'a> {
 
     fn decl_func(&mut self) {
         let name = self.parse_name().to_string();
-        let ftype = self.func(Some(name.clone()));
+        let ftype = self.func(Some(Function(name.clone())));
         self.def_var(name, Some(ValType::Func(Box::new(ftype))), false, false);
     }
 
-    fn func(&mut self, name: Option<String>) -> FuncType {
+    fn func(&mut self, name: Option<Function>) -> FuncType {
         self.begin_scope();
         self.consume(Token::LeftParen);
 
@@ -253,12 +258,11 @@ impl<'a> Compiler<'a> {
                 // no anonimous parameter support
                 let param_name = String::from(self.parse_name());
                 let param_type = self.parse_type();
-
                 param_names.push(param_name.clone());
                 param_types.push(param_type.clone());
 
                 self.decl_scoped_name(param_name.clone());
-                // It neither is a global scope nor validation case, so no codes are added here
+                // It neither is a global scope nor a validation case, so no codes are added here
                 self.def_var(param_name, Some(param_type), false, false);
 
                 if !self.consume_if(Token::Comma) {
@@ -288,10 +292,7 @@ impl<'a> Compiler<'a> {
         let len = param_types.len();
         if len >= 1 {
             for (i, param_type) in param_types.iter().enumerate() {
-                self.add_code(OpCode::ValidateTypeAtWithLiteralCast(
-                    param_type.clone(),
-                    len - i - 1,
-                ));
+                self.add_code(OpCode::TypeValidationAt(param_type.clone(), len - i - 1));
             }
         }
 
@@ -301,7 +302,10 @@ impl<'a> Compiler<'a> {
 
         let mut cunit = mem::replace(&mut self.cunit, cunit);
         if let CUnit::Function(funit) = &mut cunit {
-            match entry_point::check(self.cur_package.as_ref().unwrap(), funit) {
+            match self
+                .entry_point
+                .check(self.cur_package.as_ref().unwrap(), funit)
+            {
                 Ok(()) => {}
                 Err(e) => self.err(e.0),
             }
@@ -385,7 +389,7 @@ impl<'a> Compiler<'a> {
         &self.lexemes[self.current]
     }
 
-    fn prev(&self) -> &Lexeme {
+    fn prev(&self) -> &'a Lexeme {
         &self.lexemes[self.current - 1]
     }
 
@@ -1318,7 +1322,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_entry_point(&mut self) {
-        self.add_code(OpCode::GetGlobal(entry_point::FUNC_NAME.to_string()));
+        self.add_code(OpCode::GetGlobal(
+            self.entry_point.func_name().0.to_string(),
+        ));
         self.add_code(OpCode::Call(0));
     }
 
@@ -1390,38 +1396,6 @@ impl Precedence {
     }
 }
 
-struct Package(String);
-
-struct SignatureError(String);
-type SignValidationResult = std::result::Result<(), SignatureError>;
-
-/// Entry point validation and check.
-mod entry_point {
-    use super::*;
-
-    pub(super) const FUNC_NAME: &str = "main";
-    const PACK_NAME: &str = "main";
-
-    pub(super) fn check(pack: &Package, funit: &FuncUnit) -> SignValidationResult {
-        if pack.0 == PACK_NAME && funit.name() == FUNC_NAME {
-            if validate_signature(funit) {
-                Ok(())
-            } else {
-                Err(SignatureError(format!(
-                    "Function \"{}\" must not have parameters and a return value",
-                    FUNC_NAME,
-                )))
-            }
-        } else {
-            Ok(())
-        }
-    }
-
-    fn validate_signature(funit: &FuncUnit) -> bool {
-        funit.ret_type().is_none() && funit.param_names().is_empty()
-    }
-}
-
 const ASSIGN_OPERATORS: [Token; 12] = [
     Token::PlusEqual,
     Token::MinusEqual,
@@ -1439,7 +1413,7 @@ const ASSIGN_OPERATORS: [Token; 12] = [
 
 const INC_OPERATORS: [Token; 2] = [Token::Inc, Token::Dec];
 
-/// Value context.
+/// Context of a value in an expression.
 mod val_context {
     pub type Context = u8;
 

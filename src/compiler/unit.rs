@@ -1,4 +1,5 @@
 use super::opcode::Chunk;
+use super::structure::{Function as FunctionItem, Package as PackageItem};
 use super::vtype::FuncType;
 use super::ValType;
 
@@ -38,21 +39,20 @@ impl CompilationUnit {
 
 #[derive(Clone, Debug)]
 pub struct PackageUnit {
-    //FIXME use package object
-    name: String,
+    package: PackageItem,
     codes: Chunk,
 }
 
 impl PackageUnit {
     pub(super) fn new() -> Self {
         Self {
-            name: "".to_string(),
+            package: PackageItem("".to_string()),
             codes: Chunk::new(),
         }
     }
 
-    pub(super) fn set_name(&mut self, name: String) {
-        self.name = name;
+    pub(super) fn set_package(&mut self, package: PackageItem) {
+        self.package = package;
     }
 }
 
@@ -66,19 +66,23 @@ impl Default for PackageUnit {
 pub struct FuncUnit {
     ftype: FuncType,
     param_names: Vec<String>,
-    name: String,
+    function: FunctionItem,
     codes: Chunk,
 }
 
 impl FuncUnit {
     pub(super) const MAX_ARGC: u8 = u8::MAX;
 
-    pub(super) fn new(name: Option<String>, ftype: FuncType, param_names: Vec<String>) -> Self {
+    pub(super) fn new(
+        name: Option<FunctionItem>,
+        ftype: FuncType,
+        param_names: Vec<String>,
+    ) -> Self {
         Self::from_codes(name, ftype, param_names, Chunk::new())
     }
 
     fn from_codes(
-        name: Option<String>,
+        name: Option<FunctionItem>,
         ftype: FuncType,
         param_names: Vec<String>,
         codes: Chunk,
@@ -86,7 +90,7 @@ impl FuncUnit {
         Self {
             param_names,
             ftype,
-            name: name.unwrap_or_else(|| "".to_string()),
+            function: name.unwrap_or_else(|| FunctionItem("".to_string())),
             codes,
         }
     }
@@ -99,7 +103,7 @@ impl FuncUnit {
         &self.param_names
     }
 
-    pub(crate) fn name(&self) -> &str {
-        &self.name
+    pub(crate) fn function(&self) -> &FunctionItem {
+        &self.function
     }
 }
