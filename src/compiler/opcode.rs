@@ -48,7 +48,6 @@ pub enum OpCode {
     String(Value),
     Func(CompilationUnit),
 
-    // FIXME remove Value from here
     IntLiteral(Value),
     FloatLiteral(Value),
     ArrayLiteral(usize, ValType),
@@ -67,8 +66,7 @@ pub enum OpCode {
 
     BlindLiteralCast,
     LoseSoftReference,
-    TypeValidation(ValType),
-    TypeValidationAt(ValType, usize), //FIXME
+    TypeValidation(ValType, usize),
     PutDefaultValue(ValType),
 }
 

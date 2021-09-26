@@ -184,7 +184,7 @@ impl<'a> Compiler<'a> {
             //FIXME change logic
             if validate {
                 if let Some(vtype) = vtype {
-                    self.add_code(OpCode::TypeValidation(vtype));
+                    self.add_code(OpCode::TypeValidation(vtype, 0));
                 } else if litcast {
                     self.add_code(OpCode::BlindLiteralCast);
                 }
@@ -225,7 +225,7 @@ impl<'a> Compiler<'a> {
             self.add_code(OpCode::ConstGlobal(name, vtype));
         } else {
             if let Some(vtype) = vtype {
-                self.add_code(OpCode::TypeValidation(vtype));
+                self.add_code(OpCode::TypeValidation(vtype, 0));
             } else {
                 self.add_code(OpCode::BlindLiteralCast);
             }
@@ -292,7 +292,7 @@ impl<'a> Compiler<'a> {
         let len = param_types.len();
         if len >= 1 {
             for (i, param_type) in param_types.iter().enumerate() {
-                self.add_code(OpCode::TypeValidationAt(param_type.clone(), len - i - 1));
+                self.add_code(OpCode::TypeValidation(param_type.clone(), len - i - 1));
             }
         }
 

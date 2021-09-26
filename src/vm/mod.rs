@@ -362,13 +362,6 @@ impl Vm {
 
                     self.stack.push(array);
                 }
-                OpCode::TypeValidation(vtype) => {
-                    let val = self.stack.retrieve_mut();
-                    val.lose_literal(&vtype);
-                    if !val.is_of_type(&vtype) {
-                        return Err(VmError::type_error(&vtype, &val.get_type()));
-                    }
-                }
                 OpCode::BlindLiteralCast => {
                     let val = self.stack.retrieve_mut();
                     val.lose_literal_blindly();
@@ -413,7 +406,7 @@ impl Vm {
                         return Err(VmError::incorrectly_typed("slice literal", &slice_type));
                     }
                 }
-                OpCode::TypeValidationAt(vtype, at) => {
+                OpCode::TypeValidation(vtype, at) => {
                     let val = self.stack.retrieve_by_mut(at);
                     val.lose_literal(&vtype);
                     if !val.is_of_type(&vtype) {
