@@ -1,4 +1,5 @@
 use std::fmt;
+use std::fmt::Formatter;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValType {
@@ -83,15 +84,30 @@ impl fmt::Display for ValType {
     }
 }
 
+/// Parameter type differs from a value type in that it can be variadic
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParamType(pub ValType, pub bool);
+
+impl fmt::Display for ParamType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", if self.1 { "..." } else { "" }, self.0)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FuncType {
-    args: Vec<ValType>,
+    args: Vec<ParamType>,
     ret_type: Option<ValType>,
+    variadic: bool,
 }
 
 impl FuncType {
-    pub fn new(args: Vec<ValType>, ret_type: Option<ValType>) -> Self {
-        Self { args, ret_type }
+    pub fn new(args: Vec<ParamType>, ret_type: Option<ValType>) -> Self {
+        Self {
+            variadic: matches!(args.last(), Some(ParamType(_, variadic)) if *variadic),
+            args,
+            ret_type,
+        }
     }
 
     fn name(&self) -> String {
@@ -111,13 +127,16 @@ impl FuncType {
         )
     }
 
-    #[allow(dead_code)]
-    pub fn args(&self) -> &[ValType] {
+    pub fn args(&self) -> &[ParamType] {
         &self.args
     }
 
     pub fn ret_type(&self) -> &Option<ValType> {
         &self.ret_type
+    }
+
+    pub fn variadic(&self) -> bool {
+        self.variadic
     }
 }
 

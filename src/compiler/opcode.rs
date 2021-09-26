@@ -64,7 +64,9 @@ pub enum OpCode {
     GetIndex,
     SetIndex,
 
+    // Value casting manipulation
     BlindLiteralCast,
+    VariadicSliceCast(ValType, u8),
     LoseSoftReference,
     TypeValidation(ValType, usize),
     PutDefaultValue(ValType),

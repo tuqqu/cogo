@@ -72,6 +72,7 @@ impl Vm {
 
     pub fn run(&mut self) -> VmResult<()> {
         let mut match_val: Option<Value> = None;
+        let mut last_called_argc: u8 = 0;
         let mut switches: VmStack<Switch> = VmStack::new();
 
         loop {
@@ -287,6 +288,7 @@ impl Vm {
                     self.stack.put_at(i + offset, value);
                 }
                 OpCode::Call(argc) => {
+                    last_called_argc = argc;
                     let val = self.stack.retrieve_by(argc as usize).clone();
                     match val {
                         Value::Func(name) => {
@@ -413,6 +415,21 @@ impl Vm {
                         return Err(VmError::type_error(&vtype, &val.get_type()));
                     }
                 }
+                OpCode::VariadicSliceCast(vtype, until) => {
+                    let length = last_called_argc - until;
+                    let mut slice = Vec::<Value>::with_capacity(length as usize);
+                    for _ in 0..length {
+                        let val = self.stack.pop()?;
+                        if !val.is_of_type(&vtype) {
+                            return Err(VmError::type_error(&vtype, &val.get_type()));
+                        }
+                        slice.push(val);
+                    }
+                    slice.reverse();
+
+                    let slice = Value::new_slice(slice, vtype);
+                    self.stack.push(slice);
+                }
                 OpCode::PutDefaultValue(val_type) => {
                     self.stack.push(Value::default(&val_type));
                 }
@@ -507,8 +524,8 @@ impl Vm {
 
     fn call_func(&mut self, name: &str, argc: u8) -> VmRuntimeCall<()> {
         let f = self.names.get(name)?;
-        if argc as usize != f.param_names().len() {
-            return Err(VmError::mismatched_argc(f.param_names().len(), argc));
+        if !f.is_variadic() && argc as usize != f.argc() {
+            return Err(VmError::mismatched_argc(f.argc(), argc));
         }
 
         let mut frame = CUnitFrame::new(CUnit::Function(f.clone()));

@@ -65,7 +65,6 @@ impl Default for PackageUnit {
 #[derive(Clone, Debug)]
 pub struct FuncUnit {
     ftype: FuncType,
-    param_names: Vec<String>,
     function: FunctionItem,
     codes: Chunk,
 }
@@ -73,22 +72,12 @@ pub struct FuncUnit {
 impl FuncUnit {
     pub(super) const MAX_ARGC: u8 = u8::MAX;
 
-    pub(super) fn new(
-        name: Option<FunctionItem>,
-        ftype: FuncType,
-        param_names: Vec<String>,
-    ) -> Self {
-        Self::from_codes(name, ftype, param_names, Chunk::new())
+    pub(super) fn new(name: Option<FunctionItem>, ftype: FuncType) -> Self {
+        Self::from_codes(name, ftype, Chunk::new())
     }
 
-    fn from_codes(
-        name: Option<FunctionItem>,
-        ftype: FuncType,
-        param_names: Vec<String>,
-        codes: Chunk,
-    ) -> Self {
+    fn from_codes(name: Option<FunctionItem>, ftype: FuncType, codes: Chunk) -> Self {
         Self {
-            param_names,
             ftype,
             function: name.unwrap_or_else(|| FunctionItem("".to_string())),
             codes,
@@ -99,8 +88,12 @@ impl FuncUnit {
         self.ftype.ret_type()
     }
 
-    pub(crate) fn param_names(&self) -> &[String] {
-        &self.param_names
+    pub(crate) fn argc(&self) -> usize {
+        self.ftype.args().len()
+    }
+
+    pub fn is_variadic(&self) -> bool {
+        self.ftype.variadic()
     }
 
     pub(crate) fn function(&self) -> &FunctionItem {

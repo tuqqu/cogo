@@ -47,7 +47,16 @@ impl<'a> Lexer<'a> {
             '[' => self.add_lexeme(Token::LeftBracket),
             ']' => self.add_lexeme(Token::RightBracket),
             ',' => self.add_lexeme(Token::Comma),
-            '.' => self.add_lexeme(Token::Dot),
+            '.' => {
+                let t = if self.peek() == '.' && self.peek_next() == '.' {
+                    self.advance();
+                    self.advance();
+                    Token::Ellipsis
+                } else {
+                    Token::Dot
+                };
+                self.add_lexeme(t)
+            }
             ';' => self.add_lexeme(Token::Semicolon),
             ':' => {
                 let t = if self.match_char('=') {

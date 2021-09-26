@@ -38,13 +38,16 @@ func insertionSort(vec []int) {
 
 - [x] primitive types and type conversions
 - [x] comparison, math, logic operations
-- [x] global and scoped variables
-- [x] global and scoped constants
-- [x] group declarations
-- [x] `if` statements
-- [x] `for` statements (with `breaks` and `continue`)
-- [x] `switch` statements (with `fallthrough`)
-- [x] functions (+ recursive calls)
+- [x] variables and constants
+  - [x] global and scoped
+  - [x] group declarations
+- [x] control flow
+  - [x] `if` statements
+  - [x] `for` statements (with `breaks` and `continue`)
+  - [x] `switch` statements (with `fallthrough`)
+- [x] functions
+  - [x] recursive functions
+  - [x] variadic functions
 - [x] partial support of `builtin.go`
 - [x] arrays
 - [x] slices (partially)

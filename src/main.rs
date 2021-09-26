@@ -18,7 +18,7 @@ fn main() {
         _ => {}
     }
 
-    let debug = args.contains(&"--debug".to_string()) || args.contains(&"-t".to_string());
+    let debug = args.contains(&"--debug".to_string()) || args.contains(&"-d".to_string());
     let args: Vec<String> = args
         .into_iter()
         .filter(|arg| !arg.starts_with('-'))

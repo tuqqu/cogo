@@ -8,7 +8,8 @@ pub(crate) enum Token {
     Semicolon,
     Comma,
     Dot,
-    Backquote,
+    Ellipsis,
+    Backtick,
 
     LeftParen,
     RightParen,
@@ -138,7 +139,8 @@ impl Token {
             Self::Semicolon => ";",
             Self::Comma => ",",
             Self::Dot => ".",
-            Self::Backquote => "`",
+            Self::Ellipsis => "...",
+            Self::Backtick => "`",
 
             Self::LeftParen => "(",
             Self::RightParen => ")",

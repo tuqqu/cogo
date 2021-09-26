@@ -43,7 +43,7 @@ impl EntryPoint {
     }
 
     fn validate_signature(funit: &FuncUnit) -> bool {
-        funit.ret_type().is_none() && funit.param_names().is_empty()
+        funit.ret_type().is_none() && funit.argc() == 0
     }
 }
 
@@ -76,14 +76,10 @@ mod tests {
     }
 
     fn create_funit(fname: String) -> FuncUnit {
-        FuncUnit::new(Some(Function(fname)), FuncType::new(vec![], None), vec![])
+        FuncUnit::new(Some(Function(fname)), FuncType::new(vec![], None))
     }
 
     fn create_funit_with_ret_type(fname: String, ret_type: ValType) -> FuncUnit {
-        FuncUnit::new(
-            Some(Function(fname)),
-            FuncType::new(vec![], Some(ret_type)),
-            vec![],
-        )
+        FuncUnit::new(Some(Function(fname)), FuncType::new(vec![], Some(ret_type)))
     }
 }

@@ -138,14 +138,14 @@ impl Value {
                     ValType::Uintptr => Self::Uintptr(*v as usize),
                     ValType::Float32 => Self::Float32(*v as f32),
                     ValType::Float64 => Self::Float64(*v as f64),
-                    _ => panic!("Wrong type cast {} for integer literal", vtype),
+                    _ => return,
                 }
             }
             Self::FloatLiteral(v) => {
                 *self = match vtype {
                     ValType::Float32 => Self::Float32(*v as f32),
                     ValType::Float64 => Self::Float64(*v),
-                    _ => panic!("Wrong type cast {} for float literal", vtype),
+                    _ => return,
                 }
             }
             _ => {}

@@ -9,8 +9,8 @@ use self::scope::Scope;
 use self::structure::{EntryPoint, Function, Package};
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
 pub(crate) use self::value::{RefIterator, Value};
-use self::vtype::FuncType;
 pub(crate) use self::vtype::ValType;
+use self::vtype::{FuncType, ParamType};
 use crate::lex::lexeme::{Lexeme, Token};
 use crate::lex::Lexer;
 use crate::vm::CUnitFrame;
@@ -248,7 +248,8 @@ impl<'a> Compiler<'a> {
         self.consume(Token::LeftParen);
 
         let mut param_names = Vec::<String>::new();
-        let mut param_types = Vec::<ValType>::new();
+        let mut param_types = Vec::<ParamType>::new();
+        let mut is_func_variadic = false;
 
         if !self.check(Token::RightParen) {
             loop {
@@ -256,15 +257,35 @@ impl<'a> Compiler<'a> {
                     self.err("Maximum parameter count reached.".to_string());
                 }
 
-                // no anonimous parameter support
+                // no anonymous parameter support yet
                 let param_name = String::from(self.parse_name());
-                let param_type = self.parse_type();
+                let is_param_variadic = self.parse_variadic();
+                let vtype = self.parse_type();
+
                 param_names.push(param_name.clone());
-                param_types.push(param_type.clone());
+                param_types.push(ParamType(vtype.clone(), is_param_variadic));
 
                 self.decl_scoped_name(param_name.clone());
+
+                let var_type;
+                if is_param_variadic {
+                    // if it is a variadic parameter, we must define variable of a slice type instead
+                    var_type = ValType::Slice(Box::new(vtype));
+                    if is_func_variadic {
+                        self.err("Function cannot have multiple variadic parameters".to_string());
+                        break;
+                    }
+                    is_func_variadic = true;
+                } else {
+                    var_type = vtype;
+                    if is_func_variadic {
+                        self.err("Function must not have non-final variadic parameter".to_string());
+                        break;
+                    }
+                }
+
                 // It neither is a global scope nor a validation case, so no codes are added here
-                self.def_var(param_name, Some(param_type), false, false);
+                self.def_var(param_name, Some(var_type), false, false);
 
                 if !self.consume_if(Token::Comma) {
                     break;
@@ -286,14 +307,18 @@ impl<'a> Compiler<'a> {
         let ftype = FuncType::new(param_types.clone(), ret_type);
 
         // Before this line there ought not to be any OpCode addition to the current CUnit
-        let cunit = CUnit::Function(FuncUnit::new(name, ftype.clone(), param_names));
+        let cunit = CUnit::Function(FuncUnit::new(name, ftype.clone()));
         let cunit = mem::replace(&mut self.cunit, cunit);
 
-        //FIXME rethink param type validation
-        let len = param_types.len();
-        if len >= 1 {
-            for (i, param_type) in param_types.iter().enumerate() {
-                self.add_code(OpCode::TypeValidation(param_type.clone(), len - i - 1));
+        param_types.reverse();
+        for (i, ParamType(vtype, variadic)) in param_types.iter().enumerate() {
+            if *variadic {
+                self.add_code(OpCode::VariadicSliceCast(
+                    vtype.clone(),
+                    (param_types.len() - 1) as u8,
+                ));
+            } else {
+                self.add_code(OpCode::TypeValidation(vtype.clone(), i));
             }
         }
 
@@ -710,6 +735,15 @@ impl<'a> Compiler<'a> {
         self.advance();
 
         val_type
+    }
+
+    fn parse_variadic(&mut self) -> bool {
+        let variadic = matches!(self.current().token, Token::Ellipsis);
+        if variadic {
+            self.advance();
+        }
+
+        variadic
     }
 
     fn parse_constant_int(&mut self) -> usize {
