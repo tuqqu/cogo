@@ -941,8 +941,8 @@ impl Display for Value {
             Self::String(s) => s.clone(),
             Self::Array(iter, _size, vtype) => iter_to_string(iter, vtype),
             Self::Slice(iter, vtype) => iter_to_string(iter, vtype),
-            _ => {
-                panic!("Unknown string type representation for value")
+            v => {
+                panic!("Unknown string type representation for value {:?}", v)
             }
         };
 

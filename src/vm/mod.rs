@@ -72,8 +72,8 @@ impl Vm {
 
     pub fn run(&mut self) -> VmResult<()> {
         let mut match_val: Option<Value> = None;
-        let mut last_called_argc: u8 = 0;
         let mut switches: VmStack<Switch> = VmStack::new();
+        let mut last_call: Call = Call::new(0, false);
 
         loop {
             let op_code = self.current_frame().next().clone();
@@ -287,8 +287,8 @@ impl Vm {
 
                     self.stack.put_at(i + offset, value);
                 }
-                OpCode::Call(argc) => {
-                    last_called_argc = argc;
+                OpCode::Call(argc, spread) => {
+                    last_call = Call::new(argc, spread);
                     let val = self.stack.retrieve_by(argc as usize).clone();
                     match val {
                         Value::Func(name) => {
@@ -297,7 +297,7 @@ impl Vm {
                                 arg.copy_if_soft_reference();
                             }
 
-                            self.call_func(&name, argc)?;
+                            self.call_func(&name, argc, spread)?;
                             self.current_frame_mut().inc_pointer(1);
                             self.current_frame += 1;
                             continue;
@@ -416,19 +416,21 @@ impl Vm {
                     }
                 }
                 OpCode::VariadicSliceCast(vtype, until) => {
-                    let length = last_called_argc - until;
-                    let mut slice = Vec::<Value>::with_capacity(length as usize);
-                    for _ in 0..length {
-                        let val = self.stack.pop()?;
-                        if !val.is_of_type(&vtype) {
-                            return Err(VmError::type_error(&vtype, &val.get_type()));
+                    if !last_call.spread {
+                        let length = last_call.argc - until;
+                        let mut slice = Vec::<Value>::with_capacity(length as usize);
+                        for _ in 0..length {
+                            let val = self.stack.pop()?;
+                            if !val.is_of_type(&vtype) {
+                                return Err(VmError::type_error(&vtype, &val.get_type()));
+                            }
+                            slice.push(val);
                         }
-                        slice.push(val);
-                    }
-                    slice.reverse();
+                        slice.reverse();
 
-                    let slice = Value::new_slice(slice, vtype);
-                    self.stack.push(slice);
+                        let slice = Value::new_slice(slice, vtype);
+                        self.stack.push(slice);
+                    }
                 }
                 OpCode::PutDefaultValue(val_type) => {
                     self.stack.push(Value::default(&val_type));
@@ -522,9 +524,9 @@ impl Vm {
         VmResult::Ok(())
     }
 
-    fn call_func(&mut self, name: &str, argc: u8) -> VmRuntimeCall<()> {
+    fn call_func(&mut self, name: &str, argc: u8, spread: bool) -> VmRuntimeCall<()> {
         let f = self.names.get(name)?;
-        if !f.is_variadic() && argc as usize != f.argc() {
+        if (!f.is_variadic() || f.is_variadic() && spread) && argc as usize != f.argc() {
             return Err(VmError::mismatched_argc(f.argc(), argc));
         }
 
@@ -616,6 +618,17 @@ impl Switch {
             jump_from_case: false,
             fall_flag: false,
         }
+    }
+}
+
+struct Call {
+    argc: u8,
+    spread: bool,
+}
+
+impl Call {
+    fn new(argc: u8, spread: bool) -> Self {
+        Self { argc, spread }
     }
 }
 

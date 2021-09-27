@@ -406,6 +406,7 @@ impl<'a> Compiler<'a> {
             Token::True => (Some(Self::literal), None, Precedence::None),
             Token::Var => (None, None, Precedence::None),
             Token::Const => (None, None, Precedence::None),
+            Token::Ellipsis => (None, None, Precedence::None),
             Token::Eof => (None, None, Precedence::None),
             tok => panic!("Unknown token {}", tok),
         }
@@ -415,7 +416,7 @@ impl<'a> Compiler<'a> {
         &self.lexemes[self.current]
     }
 
-    fn prev(&self) -> &'a Lexeme {
+    fn prev(&self) -> &Lexeme {
         &self.lexemes[self.current - 1]
     }
 
@@ -1220,8 +1221,11 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn parse_args(&mut self) -> u8 {
-        let mut argc = 0;
+    /// Parses actual arguments, returns their count
+    /// and whether the call uses the spread operator on the last argument
+    fn parse_args(&mut self) -> (u8, bool) {
+        let (mut argc, mut spread) = (0, false);
+
         if !self.check(Token::RightParen) {
             loop {
                 self.expr();
@@ -1232,6 +1236,10 @@ impl<'a> Compiler<'a> {
 
                 argc += 1;
 
+                if self.parse_variadic() {
+                    spread = true;
+                }
+
                 if !self.consume_if(Token::Comma) {
                     break;
                 }
@@ -1239,11 +1247,17 @@ impl<'a> Compiler<'a> {
                 if self.check(Token::RightParen) {
                     break;
                 }
+
+                if spread {
+                    // if present, then it is the last argument
+                    break;
+                }
             }
         }
+
         self.consume(Token::RightParen);
 
-        argc
+        (argc, spread)
     }
 
     fn binary(&mut self, _: bool) {
@@ -1300,8 +1314,8 @@ impl<'a> Compiler<'a> {
     }
 
     fn call(&mut self, _: bool) {
-        let args = self.parse_args();
-        self.add_code(OpCode::Call(args));
+        let (args, spread) = self.parse_args();
+        self.add_code(OpCode::Call(args, spread));
     }
 
     fn index(&mut self, assign: bool) {
@@ -1360,7 +1374,7 @@ impl<'a> Compiler<'a> {
         self.add_code(OpCode::GetGlobal(
             self.entry_point.func_name().0.to_string(),
         ));
-        self.add_code(OpCode::Call(0));
+        self.add_code(OpCode::Call(0, false));
     }
 
     /// Adjust the value of previously put Jump opcode

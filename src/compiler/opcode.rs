@@ -23,7 +23,7 @@ pub enum OpCode {
     Remainder,
 
     //Misc
-    Call(u8),
+    Call(u8, bool),
 
     Equal,
     NotEqual,

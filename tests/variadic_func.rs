@@ -3,7 +3,7 @@ mod common;
 use common::compare_stderr_output;
 
 #[test]
-fn test_func_variadic_1() {
+fn test_func_variadic() {
     compare_stderr_output(
         r#"
 package main
@@ -146,6 +146,69 @@ true
 false
 <[]string>[<[]string>[hi] <[]string>[hello good day] <[]string>[hi] <[]string>[bye farewell]]
 4
+",
+    )
+}
+
+#[test]
+fn test_func_variadic_with_spread_call() {
+    compare_stderr_output(
+        r#"
+package main
+
+func main() {
+    var x int = 45
+    v1([]int{1}...)
+    v1([]int{1, x}...)
+    v1([]int{1, 2, x, 4, 5}...)
+
+    var s = []string{"good day", "hi"}
+    v2("01", s...)
+    v2("02", []string{"first", "second"}...)
+
+    var ss1 = []string{"hi"}
+    var ss2 = []string{"bye", "farewell"}
+    var ss3 [][]string
+    ss3 = append(ss3, ss1, ss2)
+    var res1 = v3(true, ss3...)
+    println(res1)
+
+    var ss4 [][]string
+
+    var res2 = v3(true, ss4...)
+    println(res2)
+
+}
+
+func v1(x ...int) {
+    println(x)
+}
+
+func v2(f string, x ...string) {
+    println(f)
+    println(x)
+}
+
+func v3(f bool, x ...[]string) int {
+    println(f)
+    println(x)
+
+    return len(x)
+}
+        "#,
+        "<[]int>[1]
+<[]int>[1 45]
+<[]int>[1 2 45 4 5]
+01
+<[]string>[good day hi]
+02
+<[]string>[first second]
+true
+<[][]string>[<[]string>[hi] <[]string>[bye farewell]]
+2
+true
+<[][]string>[]
+0
 ",
     )
 }
