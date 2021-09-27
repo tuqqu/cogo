@@ -197,3 +197,32 @@ func multiply(array [4]int, by int) [4]int {
 "#,
     )
 }
+
+#[test]
+fn test_array_auto_size() {
+    compare_stderr_output(
+        r#"
+package main
+
+func main() {
+    x := [...]int{2, 3, 4, 5}
+    println(x)
+    println(len(x))
+
+    var y [4][4]int = [...][4]int{
+        [4]int{1, 2, 3, 4},
+        [4]int{1, 2, 5, 7},
+        x,
+        x,
+    }
+    println(y)
+    println(len(y))
+}
+"#,
+        r#"<[4]int>[2 3 4 5]
+4
+<[4][4]int>[<[4]int>[1 2 3 4] <[4]int>[1 2 5 7] <[4]int>[2 3 4 5] <[4]int>[2 3 4 5]]
+4
+"#,
+    )
+}

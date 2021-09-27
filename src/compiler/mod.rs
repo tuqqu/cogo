@@ -738,6 +738,38 @@ impl<'a> Compiler<'a> {
         val_type
     }
 
+    /// Allows extended type declarations possible only in literals, e.g. [...]int
+    /// `bool` indicates whether the ValType is in its finished form
+    fn parse_literal_type(&mut self) -> (ValType, bool) {
+        let current = self.current();
+        match current.token {
+            Token::LeftBracket => {
+                self.advance();
+
+                if self.check(Token::RightBracket) {
+                    // slice
+                    self.advance();
+                    let slice_type = self.parse_type();
+
+                    (ValType::Slice(Box::new(slice_type)), true)
+                } else {
+                    // array
+                    let (size, finished) = if self.parse_variadic() {
+                        (0, false)
+                    } else {
+                        (self.parse_constant_int(), true)
+                    };
+
+                    self.consume(Token::RightBracket);
+                    let array_type = self.parse_type();
+
+                    (ValType::Array(Box::new(array_type), size), finished)
+                }
+            }
+            tok => panic!("Literal Type expected, got {}.", tok),
+        }
+    }
+
     fn parse_variadic(&mut self) -> bool {
         let variadic = matches!(self.current().token, Token::Ellipsis);
         if variadic {
@@ -749,7 +781,11 @@ impl<'a> Compiler<'a> {
 
     fn parse_constant_int(&mut self) -> usize {
         self.advance();
-        let size = self.prev().literal.parse::<usize>().unwrap();
+        let size = self
+            .prev()
+            .literal
+            .parse::<usize>()
+            .expect("Constant integer expected");
 
         size
     }
@@ -1301,8 +1337,15 @@ impl<'a> Compiler<'a> {
                 };
 
                 self.rollback();
-                let vtype = self.parse_type();
+                let (mut vtype, finished) = self.parse_literal_type();
                 let len = self.parse_array_body();
+
+                if !finished {
+                    if let ValType::Array(_, size) = &mut vtype {
+                        *size = len
+                    }
+                }
+
                 code(len, vtype)
             }
             _ => {
