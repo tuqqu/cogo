@@ -989,7 +989,18 @@ impl<'a> Compiler<'a> {
 
     /// `if` statement, covers `if else` and `else` clauses as well
     fn stmt_if(&mut self) {
-        self.expr();
+        self.begin_scope();
+        self.expr_simple();
+        if self.check(Token::Semicolon) {
+            // if with an initialization statement
+            // if init_stmt; expr {}
+            self.consume(Token::Semicolon);
+            self.expr();
+        } else {
+            // if expr {}
+            self.pop_code(OpCode::Pop);
+        }
+
         let if_jump = self.add_code(OpCode::IfFalseJump(0));
         self.add_code(OpCode::Pop);
 
@@ -1010,6 +1021,7 @@ impl<'a> Compiler<'a> {
         }
 
         self.finish_jump(jump);
+        self.end_scope();
     }
 
     fn and(&mut self, _: bool) {

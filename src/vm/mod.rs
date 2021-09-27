@@ -443,6 +443,7 @@ impl Vm {
                         }
                         Value::Bool(true) => {}
                         val => {
+                            eprintln!("\x1b[0;35m{:#?}\x1b[0m", val);
                             return Err(VmError::non_bool_in_condition(&val.get_type()));
                         }
                     }

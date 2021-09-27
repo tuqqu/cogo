@@ -208,3 +208,55 @@ kk
 "#,
     )
 }
+
+#[test]
+fn test_if_with_init_stmt() {
+    compare_stderr_output(
+        r#"
+package main
+
+func main() {
+    x := 10
+    if x := 1; true {
+        x++
+        println(x)
+    }
+    println(x)
+
+    if x := true; true != !x {
+        println("a")
+    }
+
+    if x := "hi"; "hi" != x {
+        println("b")
+    }
+
+    var x1 bool = true;
+    if y := 5; x1 == (y == 5) {
+        println("c")
+    }
+
+    if x := 0; x == 0 {
+        println("d")
+    }
+
+    if x := 1; 5 - 2 == 2 + x {
+        println(x)
+    }
+
+    if x := []int{1, 2}; len(x) == 2 {
+        x = append(x, 4)
+        println(len(x))
+    }
+}
+"#,
+        r#"2
+10
+a
+c
+d
+1
+3
+"#,
+    )
+}
