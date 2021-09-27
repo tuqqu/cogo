@@ -54,6 +54,10 @@ impl Vm {
         self.define_builtin("string", Some(1), builtin_string);
         self.define_builtin("len", Some(1), builtin_len);
         self.define_builtin("append", None, builtin_append);
+        self.define_builtin("complex", Some(2), builtin_complex);
+        self.define_builtin("real", Some(1), builtin_real);
+        self.define_builtin("imag", Some(1), builtin_imag);
+        self.define_builtin("panic", Some(1), builtin_panic);
     }
 
     fn define_builtin(&mut self, name: &'static str, argc: Option<u8>, func: Builtin) {
@@ -63,6 +67,7 @@ impl Vm {
     }
 }
 
+/// https://pkg.go.dev/builtin#print
 fn builtin_print(argv: &[Value], streams: &dyn StreamProvider) -> CallResult {
     write!(
         &mut streams.stream_err(),
@@ -76,6 +81,7 @@ fn builtin_print(argv: &[Value], streams: &dyn StreamProvider) -> CallResult {
     Ok(None)
 }
 
+/// https://pkg.go.dev/builtin#println
 fn builtin_println(argv: &[Value], streams: &dyn StreamProvider) -> CallResult {
     writeln!(
         &mut streams.stream_err(),
@@ -89,84 +95,98 @@ fn builtin_println(argv: &[Value], streams: &dyn StreamProvider) -> CallResult {
     Ok(None)
 }
 
+/// https://pkg.go.dev/builtin#int
 fn builtin_int(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#int8
 fn builtin_int8(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int8);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#int16
 fn builtin_int16(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int16);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#int32
 fn builtin_int32(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int32);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#int64
 fn builtin_int64(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Int64);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#uint
 fn builtin_uint(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#uint8
 fn builtin_uint8(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint8);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#uint16
 fn builtin_uint16(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint16);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#uint32
 fn builtin_uint32(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint32);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#uint64
 fn builtin_uint64(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uint64);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#uintptr
 fn builtin_uintptr(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Uintptr);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#float32
 fn builtin_float32(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Float32);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#float64
 fn builtin_float64(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = v.cast_to(ValType::Float64);
     Ok(Some(v))
 }
 
+/// https://pkg.go.dev/builtin#string
 fn builtin_string(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let v = match v {
@@ -198,6 +218,7 @@ fn builtin_string(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     Ok(Some(Value::String(v)))
 }
 
+/// https://pkg.go.dev/builtin#len
 fn builtin_len(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     let len = match v {
@@ -217,6 +238,7 @@ fn builtin_len(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     Ok(Some(Value::Int(len as isize)))
 }
 
+/// https://pkg.go.dev/builtin#append
 fn builtin_append(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     let v = argv.first().unwrap();
     if let Value::Slice(slice, ValType::Slice(vtype)) = v {
@@ -232,4 +254,42 @@ fn builtin_append(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
     }
 
     Ok(Some(v.clone()))
+}
+
+/// https://pkg.go.dev/builtin#complex
+fn builtin_complex(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
+    match (&argv[0], &argv[1]) {
+        (Value::Float32(real), Value::Float32(imag)) => Ok(Some(Value::Complex64(*real, *imag))),
+        (Value::Float64(real), Value::Float64(imag)) => Ok(Some(Value::Complex128(*real, *imag))),
+        (real @ Value::Float32(_), imag) | (real @ Value::Float64(_), imag) => Err(
+            VmError::invalid_argument(&real.get_type(), &imag.get_type(), 1),
+        ),
+        (real, _) => Err(VmError::invalid_argument("float", &real.get_type(), 0)),
+    }
+}
+
+/// https://pkg.go.dev/builtin#imag
+fn builtin_imag(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
+    let v = argv.first().unwrap();
+    match v {
+        Value::Complex64(_, imag) => Ok(Some(Value::Float32(*imag))),
+        Value::Complex128(_, imag) => Ok(Some(Value::Float64(*imag))),
+        _ => Err(VmError::invalid_argument("complex", &v.get_type(), 0)),
+    }
+}
+
+/// https://pkg.go.dev/builtin#real
+fn builtin_real(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
+    let v = argv.first().unwrap();
+    match v {
+        Value::Complex64(real, _) => Ok(Some(Value::Float32(*real))),
+        Value::Complex128(real, _) => Ok(Some(Value::Float64(*real))),
+        _ => Err(VmError::invalid_argument("complex", &v.get_type(), 0)),
+    }
+}
+
+/// https://pkg.go.dev/builtin#panic
+fn builtin_panic(argv: &[Value], _: &dyn StreamProvider) -> CallResult {
+    let v = argv.first().unwrap();
+    panic!("{}", v)
 }
