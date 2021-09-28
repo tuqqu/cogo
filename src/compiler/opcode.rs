@@ -122,7 +122,7 @@ impl fmt::Debug for Chunk {
         let mut buffer = String::new();
 
         for (i, code) in self.codes.iter().enumerate() {
-            buffer += &format!("#{}: {:?} {}\n", i, code, self.pos[i],);
+            buffer += &format!("#{}: {:?} {}\n", i, code, self.pos[i]);
         }
 
         write!(f, "{}", buffer)

@@ -1,6 +1,5 @@
-use std::result;
+use std::{fmt, result};
 
-#[derive(Debug)]
 pub(crate) struct VmStack<T> {
     stack: Vec<T>,
 }
@@ -70,5 +69,20 @@ impl<T> VmStack<T> {
 
     pub(super) fn slice(&mut self, s: usize, e: usize) -> &[T] {
         &mut self.stack[s..e]
+    }
+}
+
+impl<T> fmt::Debug for VmStack<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut buffer = String::new();
+
+        for (i, value) in self.stack.iter().enumerate() {
+            buffer += &format!("{}: {:?}\n", i, value);
+        }
+
+        write!(f, "{}", buffer)
     }
 }

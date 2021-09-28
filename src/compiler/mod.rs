@@ -51,7 +51,7 @@ struct Compiler<'a> {
     scope: Scope,
     control_flow: ControlFlow,
     cur_package: Option<Package>,
-    index_depth: usize,
+    assign_start: usize,
     entry_point: EntryPoint,
 }
 
@@ -73,7 +73,7 @@ impl<'a> Compiler<'a> {
             scope: Scope::new(),
             control_flow: ControlFlow::new(),
             cur_package: None,
-            index_depth: 0,
+            assign_start: 0,
             entry_point: EntryPoint::new(Package("main".to_string()), Function("main".to_string())),
         }
     }
@@ -1087,15 +1087,14 @@ impl<'a> Compiler<'a> {
             (OpCode::GetGlobal(name.clone()), OpCode::SetGlobal(name))
         };
 
-        // Hack to make possible nested index call in an assignment context
+        // This is needed to make index calls in an assignment context
         if val_context::is_index(context) {
-            self.duplicate_codes(self.index_depth * 2);
-            self.index_depth = 0;
+            self.duplicate_codes(self.code_len() - self.assign_start);
         }
 
         self.add_code(get_code);
-
         self.advance();
+
         let operator = self.prev().token;
         //FIXME add bitwise
         let code = match operator {
@@ -1136,10 +1135,9 @@ impl<'a> Compiler<'a> {
             (OpCode::GetGlobal(name.clone()), OpCode::SetGlobal(name))
         };
 
-        // Hack to make possible nested index call in an assignment context
+        // This is needed to make index calls in an assignment context
         if val_context::is_index(context) {
-            self.duplicate_codes(self.index_depth * 2);
-            self.index_depth = 0;
+            self.duplicate_codes(self.code_len() - self.assign_start);
         }
 
         self.add_code(get_code);
@@ -1223,6 +1221,12 @@ impl<'a> Compiler<'a> {
         } else {
             OpCode::GetGlobal(name)
         };
+
+        if val_context::is_assignment(context)
+            && matches!(code, OpCode::GetLocal(_) | OpCode::GetGlobal(_))
+        {
+            self.assign_start = self.code_len();
+        }
 
         self.add_code(code);
     }
@@ -1380,16 +1384,10 @@ impl<'a> Compiler<'a> {
             val_context::INDEX
         };
 
-        // FIXME revisit this nested index counting
-        if val_context::is_assignment(context) {
-            self.index_depth += 1;
-        }
-
         self.expr();
         self.consume(Token::RightBracket);
 
         self.named_var(context);
-        self.index_depth = 0;
     }
 
     fn add_code(&mut self, code: OpCode) -> usize {
