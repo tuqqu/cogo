@@ -74,11 +74,14 @@ impl Value {
             ValType::Complex64 => Self::Complex64(0_f32, 0_f32),
             ValType::Complex128 => Self::Complex128(0_f64, 0_f64),
             ValType::String => Self::String(String::from("")),
-            ValType::Array(vtype, size) => Self::new_array(
-                vec![Self::default(vtype); *size],
-                *size,
-                ValType::Array(Box::new(*vtype.clone()), *size),
-            ),
+            ValType::Array(vtype, size) => {
+                let mut vals = vec![];
+                for _ in 0..*size {
+                    vals.push(Self::default(vtype));
+                }
+
+                Self::new_array(vals, *size, ValType::Array(Box::new(*vtype.clone()), *size))
+            }
             ValType::Slice(vtype) => {
                 Self::new_slice(vec![], ValType::Slice(Box::new(*vtype.clone())))
             }
