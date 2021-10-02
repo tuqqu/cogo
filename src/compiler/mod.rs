@@ -8,7 +8,7 @@ pub(crate) use self::opcode::OpCode;
 use self::scope::Scope;
 use self::structure::{EntryPoint, Function, Package};
 use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
-pub(crate) use self::value::{RefIterator, Value};
+pub(crate) use self::value::Value;
 pub(crate) use self::vtype::ValType;
 use self::vtype::{FuncType, ParamType};
 use crate::lex::lexeme::{Lexeme, Token};
@@ -372,7 +372,7 @@ impl<'a> Compiler<'a> {
             Token::RightCurlyBrace => (None, None, Precedence::None),
             Token::LeftBracket => (Some(Self::literal), Some(Self::index), Precedence::Index),
             Token::RightBracket => (None, None, Precedence::None),
-            Token::Comma => (None, None, Precedence::None),
+            Token::Comma => (None, Some(Self::expr_multi), Precedence::Assignment),
             Token::Dot => (None, None, Precedence::None),
             Token::Minus => (Some(Self::unary), Some(Self::binary), Precedence::Term),
             Token::Plus => (Some(Self::unary), Some(Self::binary), Precedence::Term),
@@ -455,6 +455,24 @@ impl<'a> Compiler<'a> {
 
     fn check_in(&mut self, toks: &[Token]) -> bool {
         toks.contains(&self.current().token)
+    }
+
+    fn check_rhs(&self, search: Token) -> bool {
+        let mut start = self.current;
+
+        loop {
+            let tok = self.lexemes[start].token;
+
+            if tok == search {
+                break true;
+            }
+
+            if matches!(tok, Token::Semicolon | Token::Eof | Token::LeftCurlyBrace) {
+                break false;
+            }
+
+            start += 1;
+        }
     }
 
     fn advance(&mut self) {
@@ -644,8 +662,19 @@ impl<'a> Compiler<'a> {
         len - 1
     }
 
+    /// Any expression starting with an assignment
     fn expr(&mut self) {
         self.parse_precedence(Precedence::Assignment)
+    }
+
+    /// Any expression one level higher precedence than assignment
+    fn expr_no_assign(&mut self) {
+        self.parse_precedence(Precedence::Or)
+    }
+
+    /// Used to parse comma-separated multi expression on *rhs*
+    fn expr_multi(&mut self, _: bool) {
+        self.parse_precedence(Precedence::Or)
     }
 
     fn expr_const(&mut self) {
@@ -797,7 +826,7 @@ impl<'a> Compiler<'a> {
         let mut len = 0;
         if !self.check(Token::RightCurlyBrace) {
             loop {
-                self.expr();
+                self.expr_no_assign();
                 len += 1;
 
                 if !self.consume_if(Token::Comma) {
@@ -1157,36 +1186,102 @@ impl<'a> Compiler<'a> {
 
     /// Assignment expression with a single assignment
     fn expr_assign(&mut self, context: val_context::Context) {
-        let name = self.prev().literal.clone();
-        let resolved = self.scope.resolve(&name);
+        struct AssignmentName {
+            name: String,
+            context: val_context::Context,
+            scope_resolution: Option<(usize, bool)>,
+            iter_at_stack: bool,
+        }
 
+        // lhs
+        let mut names = vec![];
+        loop {
+            let mut context = context;
+            let name = self.prev().literal.clone();
+            let name_resolution = self.scope.resolve(&name);
+
+            let mut index_depth = 0;
+            let mut last_code: Option<OpCode> = None;
+
+            while self.consume_if(Token::LeftBracket) {
+                index_depth += 1;
+                context |= val_context::INDEX;
+
+                self.expr_no_assign();
+                self.consume(Token::RightBracket);
+
+                let code = if let Some((i, _)) = name_resolution {
+                    OpCode::GetLocalIndex(i)
+                } else {
+                    OpCode::GetGlobalIndex(name.clone())
+                };
+
+                last_code = Some(code.clone());
+                self.add_code(code);
+            }
+
+            // We have to remove the last added Get*Index opcode
+            if let Some(code) = last_code {
+                self.pop_code(code);
+            }
+
+            names.push(AssignmentName {
+                name,
+                context,
+                scope_resolution: name_resolution,
+                // if index depth is greater than one, we have to always get the array from the stack
+                iter_at_stack: index_depth > 1,
+            });
+
+            if !self.consume_if(Token::Comma) {
+                break;
+            }
+
+            self.advance();
+        }
+
+        // rhs
         self.consume(Token::Equal);
         self.expr();
-        let code = if let Some((i, mutable)) = resolved {
-            if mutable {
+
+        // set opcodes after the rhs values in a reverse order
+        names.reverse();
+        let mut index_at = names.len();
+
+        for AssignmentName {
+            name,
+            scope_resolution,
+            context,
+            iter_at_stack,
+        } in names
+        {
+            let code = if let Some((i, mutable)) = scope_resolution {
+                if !mutable {
+                    self.err("Trying to assign to a const".to_string());
+                }
+
                 if val_context::is_index(context) {
-                    OpCode::SetIndex
+                    OpCode::SetLocalIndex(i, index_at, iter_at_stack)
                 } else {
                     OpCode::SetLocal(i)
                 }
+            } else if val_context::is_index(context) {
+                OpCode::SetGlobalIndex(name, index_at, iter_at_stack)
             } else {
-                self.err("Trying to assign to a const".to_string());
-                return;
-            }
-        } else if val_context::is_index(context) {
-            OpCode::SetIndex
-        } else {
-            OpCode::SetGlobal(name)
-        };
+                OpCode::SetGlobal(name)
+            };
 
-        self.add_code(code);
+            index_at -= 1;
+
+            self.add_code(code);
+        }
     }
 
     /// Parses named variable value.
     /// Expects `context` of a variable to be able to decide which opcodes to emit
     fn named_var(&mut self, context: val_context::Context) {
         if val_context::is_assignment(context) {
-            if self.check(Token::Equal) {
+            if self.check_rhs(Token::Equal) {
                 self.expr_assign(context);
             } else if self.check_in(&ASSIGN_OPERATORS) {
                 self.expr_compound_assign(context);
@@ -1280,7 +1375,7 @@ impl<'a> Compiler<'a> {
 
         if !self.check(Token::RightParen) {
             loop {
-                self.expr();
+                self.expr_no_assign();
                 if argc == FuncUnit::MAX_ARGC {
                     self.err("Too many args".to_string());
                     break; //FIXME check this
@@ -1355,7 +1450,7 @@ impl<'a> Compiler<'a> {
                 self.rollback();
                 let (mut vtype, finished) = self.parse_literal_type();
                 let len = self.parse_array_body();
-
+                //fixme add array length validation
                 if !finished {
                     if let ValType::Array(_, size) = &mut vtype {
                         *size = len

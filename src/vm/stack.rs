@@ -25,6 +25,10 @@ impl<T> VmStack<T> {
         }
     }
 
+    pub(super) fn pop_at(&mut self, at: usize) -> T {
+        self.stack.remove(at)
+    }
+
     pub(super) fn retrieve(&self) -> &T {
         self.retrieve_at(self.stack.len() - 1)
     }

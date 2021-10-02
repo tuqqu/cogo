@@ -62,7 +62,12 @@ pub enum OpCode {
     SetLocal(usize),
 
     GetIndex,
+    GetLocalIndex(usize),
+    GetGlobalIndex(String),
+
     SetIndex,
+    SetLocalIndex(usize, usize, bool),
+    SetGlobalIndex(String, usize, bool),
 
     // Value casting manipulation
     BlindLiteralCast,

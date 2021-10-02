@@ -8,7 +8,7 @@ use self::io::{StdStreamProvider, StreamProvider};
 use self::name_table::NameTable;
 use self::stack::VmStack;
 use crate::compiler::unit::{CompilationUnit as CUnit, FuncUnit};
-use crate::compiler::{OpCode, RefIterator, ValType, Value};
+use crate::compiler::{OpCode, ValType, Value};
 
 mod builtin;
 mod error;
@@ -74,6 +74,7 @@ impl Vm {
         let mut match_val: Option<Value> = None;
         let mut switches: VmStack<Switch> = VmStack::new();
         let mut last_call: Call = Call::new(0, false);
+        let mut ignore_next_pop = false;
 
         loop {
             let op_code = self.current_frame().next().clone();
@@ -201,7 +202,11 @@ impl Vm {
                     self.stack.push(le);
                 }
                 OpCode::Pop => {
-                    self.stack.pop()?;
+                    if !ignore_next_pop {
+                        self.stack.pop()?;
+                    } else {
+                        ignore_next_pop = false;
+                    }
                 }
                 OpCode::VarGlobal(name, vtype) => {
                     let mut value = self.stack.pop()?;
@@ -246,7 +251,7 @@ impl Vm {
                         return Err(VmError::undefined(&name));
                     }
 
-                    let value = self.stack.retrieve_mut();
+                    let mut value = self.stack.pop()?;
                     value.copy_if_soft_reference();
 
                     let old_v = self.globals.get_mut(&name)?;
@@ -256,13 +261,13 @@ impl Vm {
 
                     let old_v = old_v.val_mut();
                     // FIXME: maybe we should store types in a sep hashtable?
-                    if !old_v.same_type(value) {
+                    if !old_v.same_type(&value) {
                         return Err(VmError::type_error(&old_v.get_type(), &value.get_type()));
                     }
 
                     value.lose_literal(&old_v.get_type());
                     *old_v = value.clone();
-                    // no pop?
+                    ignore_next_pop = true;
                 }
                 OpCode::LoseSoftReference => {
                     let value = self.stack.retrieve_mut();
@@ -276,8 +281,10 @@ impl Vm {
                 }
                 OpCode::SetLocal(i) => {
                     let offset = self.current_frame().stack_pos;
-                    let old_v = self.stack.retrieve_at(i + offset).clone();
-                    let mut value = self.stack.retrieve().clone();
+                    let stack_pos = i + offset;
+
+                    let old_v = self.stack.retrieve_at(stack_pos).clone();
+                    let mut value = self.stack.pop()?;
                     value.lose_literal(&old_v.get_type());
                     value.copy_if_soft_reference();
 
@@ -285,7 +292,8 @@ impl Vm {
                         return Err(VmError::type_error(&old_v.get_type(), &value.get_type()));
                     }
 
-                    self.stack.put_at(i + offset, value);
+                    self.stack.put_at(stack_pos, value);
+                    ignore_next_pop = true;
                 }
                 OpCode::Call(argc, spread) => {
                     last_call = Call::new(argc, spread);
@@ -312,57 +320,65 @@ impl Vm {
                 }
                 OpCode::GetIndex => {
                     let index = self.stack.pop()?;
-                    let array = self.stack.pop()?;
-                    let index = if let Some(index) = index.to_usize() {
-                        index
-                    } else {
-                        return Err(VmError::index_type_error(&index.get_type()));
-                    };
+                    let index = iter_utils::unwrap_index(index)?;
+                    let iter = self.stack.pop()?;
 
-                    if let Value::Array(array, ..) = array {
-                        let val = array.borrow_mut()[index].clone();
-                        self.stack.push(val);
-                    } else if let Value::Slice(slice, _) = array {
-                        let val = slice.borrow_mut()[index].clone();
-                        self.stack.push(val);
-                    } else {
-                        return Err(VmError::iterator_value_expected(&array.get_type()));
-                    }
+                    self.stack.push(iter_utils::get_at_index(&iter, index)?);
+                }
+                OpCode::GetLocalIndex(i) => {
+                    let index = self.stack.pop()?;
+                    let index = iter_utils::unwrap_index(index)?;
+
+                    let offset = self.current_frame().stack_pos;
+                    let iter = self.stack.retrieve_at(i + offset).clone();
+
+                    self.stack.push(iter_utils::get_at_index(&iter, index)?);
+                }
+                OpCode::GetGlobalIndex(name) => {
+                    let index = self.stack.pop()?;
+                    let index = iter_utils::unwrap_index(index)?;
+
+                    let iter = self.globals.get(&name)?.val();
+
+                    self.stack.push(iter_utils::get_at_index(iter, index)?);
                 }
                 OpCode::SetIndex => {
                     let value = self.stack.pop()?;
                     let index = self.stack.pop()?;
-                    let mut array = self.stack.pop()?;
-                    let index = if let Some(index) = index.to_usize() {
-                        index
+                    let index = iter_utils::unwrap_index(index)?;
+
+                    let mut iter = self.stack.pop()?;
+                    iter_utils::set_at_index(&mut iter, index, value)?;
+                    ignore_next_pop = true;
+                }
+                OpCode::SetLocalIndex(i, index_at, array_at_index) => {
+                    let value = self.stack.pop()?;
+                    let index = self.stack.pop_at(self.stack.len() - index_at);
+                    let index = iter_utils::unwrap_index(index)?;
+
+                    let mut iter = if array_at_index {
+                        self.stack.pop_at(self.stack.len() - index_at)
                     } else {
-                        return Err(VmError::index_type_error(&index.get_type()));
+                        let offset = self.current_frame().stack_pos;
+                        self.stack.retrieve_at(i + offset).clone()
                     };
 
-                    fn iter_set_index(
-                        iter: &mut RefIterator,
-                        i: usize,
-                        mut v: Value,
-                        vtype: &ValType,
-                    ) -> VmResult<()> {
-                        v.lose_literal(vtype);
-                        if !v.is_of_type(vtype) {
-                            return Err(VmError::type_error(vtype, &v.get_type()));
-                        }
-                        iter.borrow_mut()[i] = v;
+                    iter_utils::set_at_index(&mut iter, index, value)?;
+                    ignore_next_pop = true;
+                }
+                OpCode::SetGlobalIndex(name, index_at, array_at_index) => {
+                    let value = self.stack.pop()?;
+                    let index = self.stack.pop_at(self.stack.len() - index_at);
+                    let index = iter_utils::unwrap_index(index)?;
 
-                        Ok(())
-                    }
-
-                    if let Value::Array(array, _, ValType::Array(ref vtype, ..)) = &mut array {
-                        iter_set_index(array, index, value, vtype)?;
-                    } else if let Value::Slice(slice, ValType::Slice(ref vtype)) = &mut array {
-                        iter_set_index(slice, index, value, vtype)?;
+                    let mut iter = if array_at_index {
+                        self.stack.pop_at(self.stack.len() - index_at)
                     } else {
-                        return Err(VmError::iterator_value_expected(&array.get_type()));
-                    }
+                        self.globals.get_mut(&name)?.val_mut().clone()
+                    };
 
-                    self.stack.push(array);
+                    iter_utils::set_at_index(&mut iter, index, value)?;
+                    ignore_next_pop = true;
                 }
                 OpCode::BlindLiteralCast => {
                     let val = self.stack.retrieve_mut();
@@ -443,7 +459,6 @@ impl Vm {
                         }
                         Value::Bool(true) => {}
                         val => {
-                            eprintln!("\x1b[0;35m{:#?}\x1b[0m", val);
                             return Err(VmError::non_bool_in_condition(&val.get_type()));
                         }
                     }
@@ -662,6 +677,41 @@ impl CUnitFrame {
             None
         } else {
             Some(self.cunit.chunk().codes()[self.pointer].clone())
+        }
+    }
+}
+
+mod iter_utils {
+    use super::*;
+
+    pub(super) fn unwrap_index(index: Value) -> VmResult<usize> {
+        if let Some(index) = index.to_usize() {
+            Ok(index)
+        } else {
+            Err(VmError::index_type_error(&index.get_type()))
+        }
+    }
+
+    pub(super) fn set_at_index(iter: &mut Value, index: usize, mut value: Value) -> VmResult<()> {
+        match iter {
+            Value::Array(iter, _, ValType::Array(ref vtype, ..))
+            | Value::Slice(iter, ValType::Slice(ref vtype)) => {
+                value.lose_literal(vtype);
+                if !value.is_of_type(vtype) {
+                    return Err(VmError::type_error(vtype, &value.get_type()));
+                }
+                iter.borrow_mut()[index] = value;
+
+                Ok(())
+            }
+            _ => Err(VmError::iterator_value_expected(&iter.get_type())),
+        }
+    }
+
+    pub(super) fn get_at_index(iter: &Value, index: usize) -> VmResult<Value> {
+        match iter {
+            Value::Array(iter, ..) | Value::Slice(iter, ..) => Ok(iter.borrow_mut()[index].clone()),
+            _ => Err(VmError::iterator_value_expected(&iter.get_type())),
         }
     }
 }

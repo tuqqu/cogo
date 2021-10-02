@@ -33,6 +33,7 @@ fn main() {
 
     let frame = compile(&contents, &mut ToStderrErrorHandler);
 
+    //fixme
     if debug {
         eprintln!("\x1b[0;34m{:#?}\x1b[0m", frame);
     }
