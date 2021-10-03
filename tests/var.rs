@@ -238,7 +238,7 @@ func main() {
 }
 
 #[test]
-fn test_group_declarations() {
+fn test_var_group_decl() {
     compare_stderr_output(
         r#"
 package main
@@ -250,14 +250,8 @@ var (
     z = "string"
 )
 
-const ()
-const (
-    A int = 3
-    E = 8
-)
-
 func main() {
-    println(x, y, z, A, E)
+    println(x, y, z)
 
     var ()
     var (
@@ -266,14 +260,44 @@ func main() {
         d = "another"
     )
 
-    const ()
-    const (
-        C int = 4
-        V = 5
-    )
-    println(a, s, d, C, V)
+    println(a, s, d)
 }
         "#,
-        "1 0 string 3 8\n9 0e0 another 4 5\n",
+        "1 0 string\n9 0e0 another\n",
+    )
+}
+
+#[test]
+fn test_var_multi_decl() {
+    compare_stderr_output(
+        r#"
+package main
+
+var (
+    a, b int8 = 1 - 9, int8(21)
+    c, d, e = "string1", "string2", "string3"
+    f, g [2]uint
+)
+
+var h, i = 8, 9 + 3
+var j, k, l [1]int = [1]int{2},[1]int{3},[1]int{6}
+
+func main() {
+    println(a,b,c,d,e,f,g,h,i,j,k,l)
+
+    var (
+        a, b int8 = 11 * 9, int8(0)
+        c, d, e = "string4", "string5", "string6"
+        f, g [3]uint
+    )
+
+    var h, i = -99, -100
+    var j, k, l [2]int
+    println(a,b,c,d,e,f,g,h,i,j,k,l)
+}
+        "#,
+        "-8 21 string1 string2 string3 <[2]uint>[0 0] <[2]uint>[0 0] 8 12 <[1]int>[2] <[1]int>[3] <[1]int>[6]
+99 0 string4 string5 string6 <[3]uint>[0 0 0] <[3]uint>[0 0 0] -99 -100 <[2]int>[0 0] <[2]int>[0 0] <[2]int>[0 0]
+",
     )
 }

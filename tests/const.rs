@@ -108,3 +108,61 @@ func main() {
         "false\ntrue\n100\n101\n9\nstring\n100\n9\nfalse\n",
     )
 }
+
+#[test]
+fn test_const_group_decl() {
+    compare_stderr_output(
+        r#"
+package main
+
+const ()
+const (
+    A int = 3
+    E = 8
+)
+
+func main() {
+    println(A, E)
+
+    const ()
+    const (
+        C int = 4
+        V = 5
+    )
+    println(C, V)
+}
+        "#,
+        "3 8\n4 5\n",
+    )
+}
+
+#[test]
+fn test_const_multi_decl() {
+    compare_stderr_output(
+        r#"
+package main
+
+const (
+    a, b int8 = 1 - 9, int8(21)
+    c, d, e = "string1", "string2", "string3"
+)
+
+const f, g = 8, 9 + 3
+
+func main() {
+    println(a,b,c,d,e)
+
+    const (
+        a, b int8 = 11 * 9, int8(0)
+        c, d, e = "string4", "string5", "string6"
+    )
+
+    const f, g = -99, -100
+    println(a,b,c,d,e)
+}
+        "#,
+        "-8 21 string1 string2 string3
+99 0 string4 string5 string6
+",
+    )
+}

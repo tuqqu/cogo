@@ -70,9 +70,9 @@ pub enum OpCode {
     SetGlobalIndex(String, usize, bool),
 
     // Value casting manipulation
-    BlindLiteralCast,
+    BlindLiteralCast(usize),
     VariadicSliceCast(ValType, u8),
-    LoseSoftReference,
+    LoseSoftReference(usize),
     TypeValidation(ValType, usize),
     PutDefaultValue(ValType),
 }

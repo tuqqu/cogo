@@ -144,9 +144,16 @@ impl<'a> Compiler<'a> {
     }
 
     fn decl_var(&mut self) {
-        let name = self.parse_name().to_string();
+        let mut names: Vec<String> = vec![];
+        loop {
+            let name = self.parse_name().to_string();
+            self.decl_scoped_name(name.clone());
+            names.push(name);
 
-        self.decl_scoped_name(name.clone());
+            if !self.consume_if(Token::Comma) {
+                break;
+            }
+        }
 
         let vtype = if !self.check(Token::Equal) {
             Some(self.parse_type())
@@ -154,16 +161,21 @@ impl<'a> Compiler<'a> {
             None
         };
 
+        names.reverse();
         if self.consume_if(Token::Equal) {
             self.expr();
-            self.def_var(name, vtype, true, true);
+            for (i, name) in names.iter().enumerate() {
+                self.def_var(name.clone(), vtype.clone(), true, true, i);
+            }
         } else {
             if vtype.is_none() {
                 self.err("Type declaration expected.".to_string());
             }
 
-            self.add_code(OpCode::PutDefaultValue(vtype.clone().unwrap()));
-            self.def_var(name, vtype, false, true);
+            for (i, name) in names.iter().enumerate() {
+                self.add_code(OpCode::PutDefaultValue(vtype.clone().unwrap()));
+                self.def_var(name.clone(), vtype.clone(), false, true, i);
+            }
         }
 
         self.consume(Token::Semicolon);
@@ -174,24 +186,31 @@ impl<'a> Compiler<'a> {
         self.consume(Token::ColonEqual);
         self.decl_scoped_name(name.clone());
         self.expr();
-        self.def_var(name, None, false, true);
+        self.def_var(name, None, false, true, 0);
     }
 
     //FIXME change flags
-    fn def_var(&mut self, name: String, vtype: Option<ValType>, validate: bool, litcast: bool) {
+    fn def_var(
+        &mut self,
+        name: String,
+        vtype: Option<ValType>,
+        validate: bool,
+        litcast: bool,
+        pos: usize,
+    ) {
         if self.is_global_scope() {
             self.add_code(OpCode::VarGlobal(name, vtype));
         } else {
             //FIXME change logic
             if validate {
                 if let Some(vtype) = vtype {
-                    self.add_code(OpCode::TypeValidation(vtype, 0));
+                    self.add_code(OpCode::TypeValidation(vtype, pos));
                 } else if litcast {
-                    self.add_code(OpCode::BlindLiteralCast);
+                    self.add_code(OpCode::BlindLiteralCast(pos));
                 }
             } else if litcast {
-                self.add_code(OpCode::LoseSoftReference);
-                self.add_code(OpCode::BlindLiteralCast);
+                self.add_code(OpCode::LoseSoftReference(pos));
+                self.add_code(OpCode::BlindLiteralCast(pos));
             }
 
             self.scope.init_last();
@@ -210,9 +229,16 @@ impl<'a> Compiler<'a> {
     }
 
     fn decl_const(&mut self) {
-        let name = self.parse_name().to_string();
+        let mut names: Vec<String> = vec![];
+        loop {
+            let name = self.parse_name().to_string();
+            self.decl_scoped_const(name.clone());
+            names.push(name);
 
-        self.decl_scoped_const(name.clone());
+            if !self.consume_if(Token::Comma) {
+                break;
+            }
+        }
 
         let vtype = if !self.check(Token::Equal) {
             Some(self.parse_type())
@@ -222,16 +248,18 @@ impl<'a> Compiler<'a> {
         self.consume(Token::Equal);
         self.expr_const();
 
-        if self.is_global_scope() {
-            self.add_code(OpCode::ConstGlobal(name, vtype));
-        } else {
-            if let Some(vtype) = vtype {
-                self.add_code(OpCode::TypeValidation(vtype, 0));
+        for (i, name) in names.iter().rev().enumerate() {
+            if self.is_global_scope() {
+                self.add_code(OpCode::ConstGlobal(name.clone(), vtype.clone()));
             } else {
-                self.add_code(OpCode::BlindLiteralCast);
-            }
+                if let Some(vtype) = vtype.clone() {
+                    self.add_code(OpCode::TypeValidation(vtype, i));
+                } else {
+                    self.add_code(OpCode::BlindLiteralCast(i));
+                }
 
-            self.scope.init_last();
+                self.scope.init_last();
+            }
         }
 
         self.consume(Token::Semicolon);
@@ -240,7 +268,7 @@ impl<'a> Compiler<'a> {
     fn decl_func(&mut self) {
         let name = self.parse_name().to_string();
         let ftype = self.func(Some(Function(name.clone())));
-        self.def_var(name, Some(ValType::Func(Box::new(ftype))), false, false);
+        self.def_var(name, Some(ValType::Func(Box::new(ftype))), false, false, 0);
     }
 
     fn func(&mut self, name: Option<Function>) -> FuncType {
@@ -285,7 +313,7 @@ impl<'a> Compiler<'a> {
                 }
 
                 // It neither is a global scope nor a validation case, so no codes are added here
-                self.def_var(param_name, Some(var_type), false, false);
+                self.def_var(param_name, Some(var_type), false, false, 0);
 
                 if !self.consume_if(Token::Comma) {
                     break;

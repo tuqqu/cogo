@@ -33,10 +33,6 @@ impl<T> VmStack<T> {
         self.retrieve_at(self.stack.len() - 1)
     }
 
-    pub(super) fn retrieve_mut(&mut self) -> &mut T {
-        self.retrieve_at_mut(self.stack.len() - 1)
-    }
-
     pub(super) fn retrieve_at(&self, i: usize) -> &T {
         self.stack
             .get(i)

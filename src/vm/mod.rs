@@ -269,8 +269,8 @@ impl Vm {
                     *old_v = value.clone();
                     ignore_next_pop = true;
                 }
-                OpCode::LoseSoftReference => {
-                    let value = self.stack.retrieve_mut();
+                OpCode::LoseSoftReference(by) => {
+                    let value = self.stack.retrieve_by_mut(by);
                     value.copy_if_soft_reference();
                 }
                 OpCode::GetLocal(i) => {
@@ -380,8 +380,8 @@ impl Vm {
                     iter_utils::set_at_index(&mut iter, index, value)?;
                     ignore_next_pop = true;
                 }
-                OpCode::BlindLiteralCast => {
-                    let val = self.stack.retrieve_mut();
+                OpCode::BlindLiteralCast(by) => {
+                    let val = self.stack.retrieve_by_mut(by);
                     val.lose_literal_blindly();
                 }
                 OpCode::ArrayLiteral(size, array_type) => {
