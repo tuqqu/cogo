@@ -1,7 +1,6 @@
 use super::opcode::Chunk;
 use super::structure::{Function as FunctionItem, Package as PackageItem};
-use super::vtype::FuncType;
-use super::ValType;
+use super::vtype::{CompositeType, FuncType};
 
 /// Chunk of Opcodes which belongs to either a function or a package
 #[derive(Clone, Debug)]
@@ -84,7 +83,7 @@ impl FuncUnit {
         }
     }
 
-    pub(crate) fn ret_type(&self) -> &Option<ValType> {
+    pub(crate) fn ret_type(&self) -> &CompositeType {
         self.ftype.ret_type()
     }
 
@@ -92,7 +91,7 @@ impl FuncUnit {
         self.ftype.args().len()
     }
 
-    pub fn is_variadic(&self) -> bool {
+    pub(crate) fn is_variadic(&self) -> bool {
         self.ftype.variadic()
     }
 

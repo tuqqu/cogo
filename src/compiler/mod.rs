@@ -11,6 +11,7 @@ use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
 pub(crate) use self::value::Value;
 pub(crate) use self::vtype::ValType;
 use self::vtype::{FuncType, ParamType};
+use crate::compiler::vtype::CompositeType;
 use crate::lex::lexeme::{Lexeme, Token};
 use crate::lex::Lexer;
 use crate::vm::CUnitFrame;
@@ -52,6 +53,8 @@ struct Compiler<'a> {
     control_flow: ControlFlow,
     cur_package: Option<Package>,
     assign_start: usize,
+    multi_count: usize,
+    composite_return: bool,
     entry_point: EntryPoint,
 }
 
@@ -74,6 +77,8 @@ impl<'a> Compiler<'a> {
             control_flow: ControlFlow::new(),
             cur_package: None,
             assign_start: 0,
+            multi_count: 0,
+            composite_return: false,
             entry_point: EntryPoint::new(Package("main".to_string()), Function("main".to_string())),
         }
     }
@@ -163,7 +168,8 @@ impl<'a> Compiler<'a> {
 
         names.reverse();
         if self.consume_if(Token::Equal) {
-            self.expr();
+            self.expr_multi_assign_validation(names.len());
+
             for (i, name) in names.iter().enumerate() {
                 self.def_var(name.clone(), vtype.clone(), true, true, i);
             }
@@ -210,7 +216,7 @@ impl<'a> Compiler<'a> {
         }
 
         self.consume(Token::ColonEqual);
-        self.expr();
+        self.expr_multi_assign_validation(names.len());
 
         for (i, name) in names.iter().enumerate() {
             self.def_var(name.clone(), None, false, true, i);
@@ -355,11 +361,7 @@ impl<'a> Compiler<'a> {
 
         self.consume(Token::RightParen);
 
-        let ret_type = if !self.check(Token::LeftCurlyBrace) {
-            Some(self.parse_type())
-        } else {
-            None
-        };
+        let ret_type = self.parse_composite_type();
         let ftype = FuncType::new(param_types.clone(), ret_type);
 
         // Before this line there ought not to be any OpCode addition to the current CUnit
@@ -627,11 +629,13 @@ impl<'a> Compiler<'a> {
     fn stmt_return(&mut self) {
         //FIXME add package checking type
         if self.consume_if(Token::Semicolon) {
-            self.add_code(OpCode::Return(true));
+            self.add_code(OpCode::Return(0));
         } else {
+            self.multi_count = 1;
             self.expr();
             self.consume(Token::Semicolon);
-            self.add_code(OpCode::Return(false));
+            self.add_code(OpCode::Return(self.multi_count as u8));
+            self.multi_count = 0;
         }
     }
 
@@ -715,6 +719,21 @@ impl<'a> Compiler<'a> {
         self.parse_precedence(Precedence::Assignment)
     }
 
+    fn expr_multi_assign_validation(&mut self, expect: usize) {
+        self.multi_count = 1;
+
+        self.expr();
+
+        if !self.composite_return && self.multi_count != expect {
+            self.err(format!(
+                "assignment count mismatch {} = {}",
+                expect, self.multi_count
+            ));
+        }
+
+        self.composite_return = false;
+    }
+
     /// Any expression one level higher precedence than assignment
     fn expr_no_assign(&mut self) {
         self.parse_precedence(Precedence::Or)
@@ -722,6 +741,7 @@ impl<'a> Compiler<'a> {
 
     /// Used to parse comma-separated multi expression on *rhs*
     fn expr_multi(&mut self, _: bool) {
+        self.multi_count += 1;
         self.parse_precedence(Precedence::Or)
     }
 
@@ -844,6 +864,26 @@ impl<'a> Compiler<'a> {
                 }
             }
             tok => panic!("Literal Type expected, got {}.", tok),
+        }
+    }
+
+    fn parse_composite_type(&mut self) -> CompositeType {
+        if self.check(Token::LeftCurlyBrace) {
+            CompositeType::new_void()
+        } else if self.consume_if(Token::LeftParen) {
+            let mut types: Vec<ValType> = vec![];
+            loop {
+                let vtype = self.parse_type();
+                types.push(vtype);
+
+                if !self.consume_if(Token::Comma) {
+                    break;
+                }
+            }
+            self.consume(Token::RightParen);
+            CompositeType::new(types)
+        } else {
+            CompositeType::new_trivial(self.parse_type())
         }
     }
 
@@ -1290,7 +1330,7 @@ impl<'a> Compiler<'a> {
 
         // rhs
         self.consume(Token::Equal);
-        self.expr();
+        self.expr_multi_assign_validation(names.len());
 
         // set opcodes after the rhs values in a reverse order
         names.reverse();
@@ -1517,6 +1557,8 @@ impl<'a> Compiler<'a> {
 
     fn call(&mut self, _: bool) {
         let (args, spread) = self.parse_args();
+        // FIXME add validation if the return value is composite
+        self.composite_return = true;
         self.add_code(OpCode::Call(args, spread));
     }
 

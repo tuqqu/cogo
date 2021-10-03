@@ -130,16 +130,23 @@ impl Vm {
                     a.modulo(&b)?;
                     self.stack.push(a);
                 }
-                OpCode::Return(void) => {
-                    let val = if !void { Some(self.stack.pop()?) } else { None };
+                OpCode::Return(len) => {
+                    let mut vals: Vec<Value> = vec![];
+                    if len != 0 {
+                        for _ in 0..len {
+                            vals.push(self.stack.pop()?)
+                        }
+                    }
 
-                    self.validate_return_type(&val)?;
+                    self.validate_return_type(&vals)?;
                     self.discard_frame_stack()?;
                     self.current_frame -= 1;
                     self.frames.pop()?;
 
-                    if !void {
-                        self.stack.push(val.unwrap());
+                    if len != 0 {
+                        for val in vals {
+                            self.stack.push(val);
+                        }
                     }
                     // we don't want to increment the frame pointer
                     continue;
@@ -597,24 +604,24 @@ impl Vm {
         Ok(())
     }
 
-    fn validate_return_type(&self, val: &Option<Value>) -> VmResult<()> {
+    fn validate_return_type(&self, vals: &[Value]) -> VmResult<()> {
         let cunit = &self.current_frame().cunit;
         if let CUnit::Function(funit) = cunit {
-            match (funit.ret_type(), val) {
-                (Some(vtype), Some(val)) => {
-                    if val.is_of_type(vtype) {
-                        Ok(())
-                    } else {
-                        Err(VmError::return_type_error(
-                            Some(vtype),
-                            Some(&val.get_type()),
-                        ))
-                    }
-                }
-                (None, None) => Ok(()),
-                (None, Some(val)) => Err(VmError::return_type_error(None, Some(&val.get_type()))),
-                (Some(vtype), None) => Err(VmError::return_type_error(Some(vtype), None)),
+            let ctype = funit.ret_type();
+            let type_len = ctype.len();
+            let val_len = vals.len();
+            if type_len != val_len {
+                return Err(VmError::return_count_error(type_len, val_len));
             }
+
+            for (i, vtype) in ctype.types().iter().enumerate() {
+                let val = &vals[val_len - i - 1];
+                if !val.is_of_type(vtype) {
+                    return Err(VmError::return_type_error(vtype, &val.get_type()));
+                }
+            }
+
+            Ok(())
         } else {
             error::panic_at_cunit_type(cunit);
         }

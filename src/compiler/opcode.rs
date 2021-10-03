@@ -42,7 +42,7 @@ pub enum OpCode {
     CaseBreakJump(usize),
     DoCaseBreakJump,
     Fallthrough,
-    Return(bool),
+    Return(u8),
 
     Bool(Value),
     String(Value),

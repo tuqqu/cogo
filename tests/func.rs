@@ -174,3 +174,47 @@ hi!hi!
 ",
     )
 }
+
+#[test]
+fn test_func_multi_return() {
+    compare_stderr_output(
+        r#"
+package main
+
+func main() {
+    var a, b uint = f1(1)
+    println(a, b)
+
+    var c, d = f2(true)
+    println(c, d)
+
+    d, e, f := f3()
+    println(d, e, f)
+
+    g, h, i := f4()
+    println(g, h, i)
+}
+
+func f1(x int) (uint, uint) {
+    return uint(x + 1), 4
+}
+
+func f2(b bool) (int, bool) {
+    return 1, !b
+}
+
+func f3() (bool, string, int) {
+    return true, "hi", 1
+}
+
+func f4() ([2]int, uint, [1]string) {
+    return [2]int{1,2}, 3, [...]string{"hi"}
+}
+        "#,
+        "4 2
+false 1
+1 hi true
+<[1]string>[hi] 3 <[2]int>[1 2]
+",
+    )
+}

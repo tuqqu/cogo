@@ -43,7 +43,7 @@ impl EntryPoint {
     }
 
     fn validate_signature(funit: &FuncUnit) -> bool {
-        funit.ret_type().is_none() && funit.argc() == 0
+        funit.ret_type().is_void() && funit.argc() == 0
     }
 }
 
@@ -52,6 +52,7 @@ mod tests {
     use super::super::vtype::FuncType;
     use super::super::ValType;
     use super::*;
+    use crate::compiler::vtype::CompositeType;
 
     #[test]
     fn test_entry_point_check() {
@@ -76,10 +77,16 @@ mod tests {
     }
 
     fn create_funit(fname: String) -> FuncUnit {
-        FuncUnit::new(Some(Function(fname)), FuncType::new(vec![], None))
+        FuncUnit::new(
+            Some(Function(fname)),
+            FuncType::new(vec![], CompositeType::new_void()),
+        )
     }
 
     fn create_funit_with_ret_type(fname: String, ret_type: ValType) -> FuncUnit {
-        FuncUnit::new(Some(Function(fname)), FuncType::new(vec![], Some(ret_type)))
+        FuncUnit::new(
+            Some(Function(fname)),
+            FuncType::new(vec![], CompositeType::new_trivial(ret_type)),
+        )
     }
 }

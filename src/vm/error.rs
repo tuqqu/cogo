@@ -40,17 +40,23 @@ impl VmError {
     }
 
     /// Error in function return value type
-    pub(super) fn return_type_error(expected: Option<&ValType>, actual: Option<&ValType>) -> Self {
-        let msg = match (expected, actual) {
-            (Some(expected), Some(actual)) => format!(
-                "Function must return \"{}\", got type \"{}\".",
-                expected, actual,
-            ),
-            (Some(expected), None) => format!("Function must return \"{}\".", expected),
-            (None, _) => "Function must not return value.".to_string(),
-        };
+    pub(super) fn return_type_error(expected: &ValType, actual: &ValType) -> Self {
+        Self::Runtime(format!(
+            "Function must return value of type \"{}\", got type \"{}\".",
+            expected, actual,
+        ))
+    }
 
-        Self::Runtime(msg)
+    /// Error in function return value count
+    pub(super) fn return_count_error(expected: usize, actual: usize) -> Self {
+        if expected == 0 {
+            Self::Runtime("Function must not return value.".to_string())
+        } else {
+            Self::Runtime(format!(
+                "Function must return exactly {} values, returned {}.",
+                expected, actual,
+            ))
+        }
     }
 
     /// When non-boolean values are being used in conditional statements where only booleans

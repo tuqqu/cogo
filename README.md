@@ -19,14 +19,11 @@ func main() {
 }
 
 func insertionSort(vec []int) {
-    var n = len(vec)
-    for i := 1; i < n; i++ {
+    for i, n := 1, len(vec); i < n; i++ {
         j := i
         for j > 0 {
             if vec[j-1] > vec[j] {
-                temp := vec[j]
-                vec[j] = vec[j-1]
-                vec[j-1] = temp
+                vec[j], vec[j-1] = vec[j-1], vec[j]
             }
             j--
         }
@@ -41,6 +38,7 @@ func insertionSort(vec []int) {
 - [x] variables and constants
   - [x] global and scoped
   - [x] group declarations
+  - [x] multiple declarations and assignments
 - [x] control flow
   - [x] `if` statements
   - [x] `for` statements (with `breaks` and `continue`)
@@ -48,6 +46,7 @@ func insertionSort(vec []int) {
 - [x] functions
   - [x] recursive functions
   - [x] variadic functions
+  - [x] multiple return values
 - [x] partial support of `builtin.go`
 - [x] arrays
 - [x] slices (partially)

@@ -84,6 +84,59 @@ impl fmt::Display for ValType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompositeType(Vec<ValType>);
+
+impl CompositeType {
+    pub(crate) fn new(types: Vec<ValType>) -> Self {
+        Self(types)
+    }
+
+    pub(crate) fn new_trivial(vtype: ValType) -> Self {
+        Self(vec![vtype])
+    }
+
+    pub(crate) fn new_void() -> Self {
+        Self(vec![])
+    }
+
+    pub(crate) fn is_trivial(&self) -> bool {
+        self.0.len() == 1
+    }
+
+    pub(crate) fn is_void(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub(crate) fn types(&self) -> &[ValType] {
+        &self.0
+    }
+}
+
+impl fmt::Display for CompositeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_void() {
+            write!(f, "")
+        } else if self.is_trivial() {
+            write!(f, "{}", self.0[0])
+        } else {
+            write!(
+                f,
+                "({})",
+                self.0
+                    .iter()
+                    .map(|vt| vt.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
+        }
+    }
+}
+
 /// Parameter type differs from a value type in that it can be variadic
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParamType(pub ValType, pub bool);
@@ -97,12 +150,12 @@ impl fmt::Display for ParamType {
 #[derive(Debug, Clone)]
 pub struct FuncType {
     args: Vec<ParamType>,
-    ret_type: Option<ValType>,
+    ret_type: CompositeType,
     variadic: bool,
 }
 
 impl FuncType {
-    pub fn new(args: Vec<ParamType>, ret_type: Option<ValType>) -> Self {
+    pub fn new(args: Vec<ParamType>, ret_type: CompositeType) -> Self {
         Self {
             variadic: matches!(args.last(), Some(ParamType(_, variadic)) if *variadic),
             args,
@@ -119,11 +172,7 @@ impl FuncType {
                 .map(|vt| vt.to_string())
                 .collect::<Vec<String>>()
                 .join(", "),
-            if let Some(ret_type) = &self.ret_type {
-                format!(" {}", ret_type.name())
-            } else {
-                "".to_string()
-            }
+            self.ret_type,
         )
     }
 
@@ -131,7 +180,7 @@ impl FuncType {
         &self.args
     }
 
-    pub fn ret_type(&self) -> &Option<ValType> {
+    pub fn ret_type(&self) -> &CompositeType {
         &self.ret_type
     }
 
