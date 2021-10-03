@@ -22,6 +22,15 @@ pub enum OpCode {
     Divide,
     Remainder,
 
+    // Bitwise
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
+    BitwiseNot,
+    BitClear,
+    LeftShift,
+    RightShift,
+
     //Misc
     Call(u8, bool),
 

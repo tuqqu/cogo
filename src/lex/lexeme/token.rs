@@ -159,7 +159,6 @@ impl Token {
             Self::BitwiseOr => "|",
             Self::BitwiseXor => "^",
             Self::BitClear => "&^",
-
             Self::LeftShift => "<<",
             Self::RightShift => ">>",
 

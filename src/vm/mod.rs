@@ -130,6 +130,47 @@ impl Vm {
                     a.modulo(&b)?;
                     self.stack.push(a);
                 }
+                OpCode::BitwiseAnd => {
+                    let b = self.stack.pop()?;
+                    let mut a = self.stack.pop()?;
+                    a.bitwise_and(&b)?;
+                    self.stack.push(a);
+                }
+                OpCode::BitwiseOr => {
+                    let b = self.stack.pop()?;
+                    let mut a = self.stack.pop()?;
+                    a.bitwise_or(&b)?;
+                    self.stack.push(a);
+                }
+                OpCode::BitwiseXor => {
+                    let b = self.stack.pop()?;
+                    let mut a = self.stack.pop()?;
+                    a.bitwise_xor(&b)?;
+                    self.stack.push(a);
+                }
+                OpCode::BitwiseNot => {
+                    let mut a = self.stack.pop()?;
+                    a.bitwise_complement()?;
+                    self.stack.push(a);
+                }
+                OpCode::BitClear => {
+                    let b = self.stack.pop()?;
+                    let mut a = self.stack.pop()?;
+                    a.bit_clear(&b)?;
+                    self.stack.push(a);
+                }
+                OpCode::LeftShift => {
+                    let b = self.stack.pop()?;
+                    let mut a = self.stack.pop()?;
+                    a.left_shift(&b)?;
+                    self.stack.push(a);
+                }
+                OpCode::RightShift => {
+                    let b = self.stack.pop()?;
+                    let mut a = self.stack.pop()?;
+                    a.right_shift(&b)?;
+                    self.stack.push(a);
+                }
                 OpCode::Return(len) => {
                     let mut vals: Vec<Value> = vec![];
                     if len != 0 {

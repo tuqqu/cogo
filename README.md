@@ -34,7 +34,7 @@ func insertionSort(vec []int) {
 ### Implemented Features
 
 - [x] primitive types and type conversions
-- [x] comparison, math, logic operations
+- [x] comparison, math, logic, bitwise operations
 - [x] variables and constants
   - [x] global and scoped
   - [x] group declarations

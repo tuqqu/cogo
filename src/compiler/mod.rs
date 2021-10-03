@@ -439,6 +439,12 @@ impl<'a> Compiler<'a> {
             Token::Slash => (None, Some(Self::binary), Precedence::Factor),
             Token::Modulus => (None, Some(Self::binary), Precedence::Factor),
             Token::Asterisk => (None, Some(Self::binary), Precedence::Factor),
+            Token::BitwiseAnd => (None, Some(Self::binary), Precedence::Factor),
+            Token::BitwiseOr => (None, Some(Self::binary), Precedence::Term),
+            Token::BitwiseXor => (Some(Self::unary), Some(Self::binary), Precedence::Term),
+            Token::BitClear => (None, Some(Self::binary), Precedence::Factor),
+            Token::LeftShift => (None, Some(Self::binary), Precedence::Factor),
+            Token::RightShift => (None, Some(Self::binary), Precedence::Factor),
             Token::Bang => (Some(Self::unary), None, Precedence::None),
             Token::BangEqual => (None, Some(Self::binary), Precedence::Equality),
             Token::Equal => (None, None, Precedence::None),
@@ -1213,13 +1219,18 @@ impl<'a> Compiler<'a> {
         self.advance();
 
         let operator = self.prev().token;
-        //FIXME add bitwise
         let code = match operator {
             Token::PlusEqual => OpCode::Add,
             Token::MinusEqual => OpCode::Subtract,
             Token::AsteriskEqual => OpCode::Multiply,
             Token::SlashEqual => OpCode::Divide,
             Token::ModulusEqual => OpCode::Remainder,
+            Token::BitwiseAndEqual => OpCode::BitwiseAnd,
+            Token::BitwiseOrEqual => OpCode::BitwiseOr,
+            Token::BitwiseXorEqual => OpCode::BitwiseXor,
+            Token::BitClearEqual => OpCode::BitClear,
+            Token::LeftShiftEqual => OpCode::LeftShift,
+            Token::RightShiftEqual => OpCode::RightShift,
             _ => {
                 return;
             }
@@ -1427,6 +1438,7 @@ impl<'a> Compiler<'a> {
             Token::Bang => OpCode::Not,
             Token::Minus => OpCode::Negate,
             Token::Plus => OpCode::PlusNoop,
+            Token::BitwiseXor => OpCode::BitwiseNot,
             _ => {
                 return;
             }
@@ -1501,7 +1513,6 @@ impl<'a> Compiler<'a> {
 
         self.parse_precedence(precedence.next());
 
-        // FIXME add bitwise
         let code = match operator {
             Token::Plus => OpCode::Add,
             Token::Minus => OpCode::Subtract,
@@ -1514,6 +1525,12 @@ impl<'a> Compiler<'a> {
             Token::GreaterEqual => OpCode::GreaterEqual,
             Token::Less => OpCode::Less,
             Token::LessEqual => OpCode::LessEqual,
+            Token::BitwiseAnd => OpCode::BitwiseAnd,
+            Token::BitwiseOr => OpCode::BitwiseOr,
+            Token::BitwiseXor => OpCode::BitwiseXor,
+            Token::BitClear => OpCode::BitClear,
+            Token::LeftShift => OpCode::LeftShift,
+            Token::RightShift => OpCode::RightShift,
             _ => {
                 return;
             }

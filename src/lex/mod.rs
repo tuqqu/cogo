@@ -108,7 +108,11 @@ impl<'a> Lexer<'a> {
                 } else if self.match_char('=') {
                     Token::BitwiseAndEqual
                 } else if self.match_char('^') {
-                    Token::BitClear
+                    if self.match_char('=') {
+                        Token::BitClearEqual
+                    } else {
+                        Token::BitClear
+                    }
                 } else {
                     Token::BitwiseAnd
                 };

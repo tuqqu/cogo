@@ -248,6 +248,27 @@ impl Value {
         Ok(())
     }
 
+    pub fn bitwise_complement(&mut self) -> OperationResult<()> {
+        use Value::*;
+        match self {
+            Int8(a) => *a = !*a,
+            Int16(a) => *a = !*a,
+            Int32(a) => *a = !*a,
+            Int64(a) => *a = !*a,
+            Int(a) => *a = !*a,
+            IntLiteral(a) => *a = !*a,
+            Uint8(a) => *a = !*a,
+            Uint16(a) => *a = !*a,
+            Uint32(a) => *a = !*a,
+            Uint64(a) => *a = !*a,
+            Uintptr(a) => *a = !*a,
+            Uint(a) => *a = !*a,
+            a => return Err(TypeError::wrong_operand_type("integer", &a.get_type())),
+        };
+
+        Ok(())
+    }
+
     pub fn add(&mut self, other: &Self) -> OperationResult<()> {
         if self.is_literal() && !other.is_literal() {
             self.lose_literal(&other.get_type());
@@ -540,6 +561,264 @@ impl Value {
                 *lhs %= *rhs;
                 *lhs_i %= *rhs_i;
             }
+            (lhs, rhs) => {
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
+            }
+        };
+
+        Ok(())
+    }
+
+    pub fn bitwise_and(&mut self, other: &Self) -> OperationResult<()> {
+        if self.is_literal() && !other.is_literal() {
+            self.lose_literal(&other.get_type());
+        }
+
+        use Value::*;
+        match (self, other) {
+            (IntLiteral(lhs), IntLiteral(rhs)) => *lhs &= rhs,
+            (Int8(lhs), IntLiteral(rhs)) => *lhs &= *rhs as i8,
+            (Int16(lhs), IntLiteral(rhs)) => *lhs &= *rhs as i16,
+            (Int32(lhs), IntLiteral(rhs)) => *lhs &= *rhs as i32,
+            (Int64(lhs), IntLiteral(rhs)) => *lhs &= *rhs as i64,
+            (Int(lhs), IntLiteral(rhs)) => *lhs &= rhs,
+            (Uint8(lhs), IntLiteral(rhs)) => *lhs &= *rhs as u8,
+            (Uint16(lhs), IntLiteral(rhs)) => *lhs &= *rhs as u16,
+            (Uint32(lhs), IntLiteral(rhs)) => *lhs &= *rhs as u32,
+            (Uint64(lhs), IntLiteral(rhs)) => *lhs &= *rhs as u64,
+            (Uintptr(lhs), IntLiteral(rhs)) => *lhs &= *rhs as usize,
+            (Uint(lhs), IntLiteral(rhs)) => *lhs &= *rhs as usize,
+
+            (Int8(lhs), Int8(rhs)) => *lhs &= rhs,
+            (Int16(lhs), Int16(rhs)) => *lhs &= rhs,
+            (Int32(lhs), Int32(rhs)) => *lhs &= rhs,
+            (Int64(lhs), Int64(rhs)) => *lhs &= rhs,
+            (Int(lhs), Int(rhs)) => *lhs &= rhs,
+            (Uint8(lhs), Uint8(rhs)) => *lhs &= rhs,
+            (Uint16(lhs), Uint16(rhs)) => *lhs &= rhs,
+            (Uint32(lhs), Uint32(rhs)) => *lhs &= rhs,
+            (Uint64(lhs), Uint64(rhs)) => *lhs &= rhs,
+            (Uintptr(lhs), Uintptr(rhs)) => *lhs &= rhs,
+            (Uint(lhs), Uint(rhs)) => *lhs &= rhs,
+
+            (lhs, rhs) => {
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
+            }
+        };
+
+        Ok(())
+    }
+
+    pub fn bitwise_or(&mut self, other: &Self) -> OperationResult<()> {
+        if self.is_literal() && !other.is_literal() {
+            self.lose_literal(&other.get_type());
+        }
+
+        use Value::*;
+        match (self, other) {
+            (IntLiteral(lhs), IntLiteral(rhs)) => *lhs |= rhs,
+            (Int8(lhs), IntLiteral(rhs)) => *lhs |= *rhs as i8,
+            (Int16(lhs), IntLiteral(rhs)) => *lhs |= *rhs as i16,
+            (Int32(lhs), IntLiteral(rhs)) => *lhs |= *rhs as i32,
+            (Int64(lhs), IntLiteral(rhs)) => *lhs |= *rhs as i64,
+            (Int(lhs), IntLiteral(rhs)) => *lhs |= rhs,
+            (Uint8(lhs), IntLiteral(rhs)) => *lhs |= *rhs as u8,
+            (Uint16(lhs), IntLiteral(rhs)) => *lhs |= *rhs as u16,
+            (Uint32(lhs), IntLiteral(rhs)) => *lhs |= *rhs as u32,
+            (Uint64(lhs), IntLiteral(rhs)) => *lhs |= *rhs as u64,
+            (Uintptr(lhs), IntLiteral(rhs)) => *lhs |= *rhs as usize,
+            (Uint(lhs), IntLiteral(rhs)) => *lhs |= *rhs as usize,
+
+            (Int8(lhs), Int8(rhs)) => *lhs |= rhs,
+            (Int16(lhs), Int16(rhs)) => *lhs |= rhs,
+            (Int32(lhs), Int32(rhs)) => *lhs |= rhs,
+            (Int64(lhs), Int64(rhs)) => *lhs |= rhs,
+            (Int(lhs), Int(rhs)) => *lhs |= rhs,
+            (Uint8(lhs), Uint8(rhs)) => *lhs |= rhs,
+            (Uint16(lhs), Uint16(rhs)) => *lhs |= rhs,
+            (Uint32(lhs), Uint32(rhs)) => *lhs |= rhs,
+            (Uint64(lhs), Uint64(rhs)) => *lhs |= rhs,
+            (Uintptr(lhs), Uintptr(rhs)) => *lhs |= rhs,
+            (Uint(lhs), Uint(rhs)) => *lhs |= rhs,
+
+            (lhs, rhs) => {
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
+            }
+        };
+
+        Ok(())
+    }
+
+    pub fn bitwise_xor(&mut self, other: &Self) -> OperationResult<()> {
+        if self.is_literal() && !other.is_literal() {
+            self.lose_literal(&other.get_type());
+        }
+
+        use Value::*;
+        match (self, other) {
+            (IntLiteral(lhs), IntLiteral(rhs)) => *lhs ^= rhs,
+            (Int8(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as i8,
+            (Int16(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as i16,
+            (Int32(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as i32,
+            (Int64(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as i64,
+            (Int(lhs), IntLiteral(rhs)) => *lhs ^= rhs,
+            (Uint8(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as u8,
+            (Uint16(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as u16,
+            (Uint32(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as u32,
+            (Uint64(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as u64,
+            (Uintptr(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as usize,
+            (Uint(lhs), IntLiteral(rhs)) => *lhs ^= *rhs as usize,
+
+            (Int8(lhs), Int8(rhs)) => *lhs ^= rhs,
+            (Int16(lhs), Int16(rhs)) => *lhs ^= rhs,
+            (Int32(lhs), Int32(rhs)) => *lhs ^= rhs,
+            (Int64(lhs), Int64(rhs)) => *lhs ^= rhs,
+            (Int(lhs), Int(rhs)) => *lhs ^= rhs,
+            (Uint8(lhs), Uint8(rhs)) => *lhs ^= rhs,
+            (Uint16(lhs), Uint16(rhs)) => *lhs ^= rhs,
+            (Uint32(lhs), Uint32(rhs)) => *lhs ^= rhs,
+            (Uint64(lhs), Uint64(rhs)) => *lhs ^= rhs,
+            (Uintptr(lhs), Uintptr(rhs)) => *lhs ^= rhs,
+            (Uint(lhs), Uint(rhs)) => *lhs ^= rhs,
+
+            (lhs, rhs) => {
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
+            }
+        };
+
+        Ok(())
+    }
+
+    pub fn bit_clear(&mut self, other: &Self) -> OperationResult<()> {
+        if self.is_literal() && !other.is_literal() {
+            self.lose_literal(&other.get_type());
+        }
+
+        use Value::*;
+        match (self, other) {
+            (IntLiteral(lhs), IntLiteral(rhs)) => *lhs &= !rhs,
+            (Int8(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as i8,
+            (Int16(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as i16,
+            (Int32(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as i32,
+            (Int64(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as i64,
+            (Int(lhs), IntLiteral(rhs)) => *lhs &= !rhs,
+            (Uint8(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as u8,
+            (Uint16(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as u16,
+            (Uint32(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as u32,
+            (Uint64(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as u64,
+            (Uintptr(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as usize,
+            (Uint(lhs), IntLiteral(rhs)) => *lhs &= !*rhs as usize,
+
+            (Int8(lhs), Int8(rhs)) => *lhs &= !rhs,
+            (Int16(lhs), Int16(rhs)) => *lhs &= !rhs,
+            (Int32(lhs), Int32(rhs)) => *lhs &= !rhs,
+            (Int64(lhs), Int64(rhs)) => *lhs &= !rhs,
+            (Int(lhs), Int(rhs)) => *lhs &= !rhs,
+            (Uint8(lhs), Uint8(rhs)) => *lhs &= !rhs,
+            (Uint16(lhs), Uint16(rhs)) => *lhs &= !rhs,
+            (Uint32(lhs), Uint32(rhs)) => *lhs &= !rhs,
+            (Uint64(lhs), Uint64(rhs)) => *lhs &= !rhs,
+            (Uintptr(lhs), Uintptr(rhs)) => *lhs &= !rhs,
+            (Uint(lhs), Uint(rhs)) => *lhs &= !rhs,
+
+            (lhs, rhs) => {
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
+            }
+        };
+
+        Ok(())
+    }
+
+    pub fn left_shift(&mut self, other: &Self) -> OperationResult<()> {
+        if self.is_literal() && !other.is_literal() {
+            self.lose_literal(&other.get_type());
+        }
+
+        use Value::*;
+        match (self, other) {
+            (IntLiteral(lhs), IntLiteral(rhs)) => *lhs <<= rhs,
+            (Int8(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as i8,
+            (Int16(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as i16,
+            (Int32(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as i32,
+            (Int64(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as i64,
+            (Int(lhs), IntLiteral(rhs)) => *lhs <<= rhs,
+            (Uint8(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as u8,
+            (Uint16(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as u16,
+            (Uint32(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as u32,
+            (Uint64(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as u64,
+            (Uintptr(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as usize,
+            (Uint(lhs), IntLiteral(rhs)) => *lhs <<= *rhs as usize,
+
+            (Int8(lhs), Int8(rhs)) => *lhs <<= rhs,
+            (Int16(lhs), Int16(rhs)) => *lhs <<= rhs,
+            (Int32(lhs), Int32(rhs)) => *lhs <<= rhs,
+            (Int64(lhs), Int64(rhs)) => *lhs <<= rhs,
+            (Int(lhs), Int(rhs)) => *lhs <<= rhs,
+            (Uint8(lhs), Uint8(rhs)) => *lhs <<= rhs,
+            (Uint16(lhs), Uint16(rhs)) => *lhs <<= rhs,
+            (Uint32(lhs), Uint32(rhs)) => *lhs <<= rhs,
+            (Uint64(lhs), Uint64(rhs)) => *lhs <<= rhs,
+            (Uintptr(lhs), Uintptr(rhs)) => *lhs <<= rhs,
+            (Uint(lhs), Uint(rhs)) => *lhs <<= rhs,
+
+            (lhs, rhs) => {
+                return Err(TypeError::expected_same_type_operands(
+                    &lhs.get_type(),
+                    &rhs.get_type(),
+                ))
+            }
+        };
+
+        Ok(())
+    }
+
+    pub fn right_shift(&mut self, other: &Self) -> OperationResult<()> {
+        if self.is_literal() && !other.is_literal() {
+            self.lose_literal(&other.get_type());
+        }
+
+        use Value::*;
+        match (self, other) {
+            (IntLiteral(lhs), IntLiteral(rhs)) => *lhs >>= rhs,
+            (Int8(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as i8,
+            (Int16(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as i16,
+            (Int32(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as i32,
+            (Int64(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as i64,
+            (Int(lhs), IntLiteral(rhs)) => *lhs >>= rhs,
+            (Uint8(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as u8,
+            (Uint16(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as u16,
+            (Uint32(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as u32,
+            (Uint64(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as u64,
+            (Uintptr(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as usize,
+            (Uint(lhs), IntLiteral(rhs)) => *lhs >>= *rhs as usize,
+
+            (Int8(lhs), Int8(rhs)) => *lhs >>= rhs,
+            (Int16(lhs), Int16(rhs)) => *lhs >>= rhs,
+            (Int32(lhs), Int32(rhs)) => *lhs >>= rhs,
+            (Int64(lhs), Int64(rhs)) => *lhs >>= rhs,
+            (Int(lhs), Int(rhs)) => *lhs >>= rhs,
+            (Uint8(lhs), Uint8(rhs)) => *lhs >>= rhs,
+            (Uint16(lhs), Uint16(rhs)) => *lhs >>= rhs,
+            (Uint32(lhs), Uint32(rhs)) => *lhs >>= rhs,
+            (Uint64(lhs), Uint64(rhs)) => *lhs >>= rhs,
+            (Uintptr(lhs), Uintptr(rhs)) => *lhs >>= rhs,
+            (Uint(lhs), Uint(rhs)) => *lhs >>= rhs,
+
             (lhs, rhs) => {
                 return Err(TypeError::expected_same_type_operands(
                     &lhs.get_type(),

@@ -198,3 +198,85 @@ true
 ",
     )
 }
+
+#[test]
+fn test_operator_bitwise() {
+    compare_stderr_output(
+        r#"
+package main
+
+func main() {
+    var x int = 65
+    var y int = 783;
+    const R = 9
+
+    println(x & y)
+    println(x & 2)
+    println(2 / 34 & 2 + 23 * 2)
+
+    println(x | y)
+    println(3 | y)
+    println(2 / 34 | 2 + 23 * 2)
+
+    println(x ^ y)
+    println(3 ^ y)
+    println(2 / 34 ^ 2 + 23 * 2)
+
+    println(^x)
+    println(4 * R - ^y * 34 + 4)
+
+    println(x << R)
+    println(3 << R)
+    println(100 / 34 << 2 + 23 * 2)
+
+    println(394 >> R)
+    println(3 >> R)
+    println(2 / 34 >> 2 + 23 * 2)
+
+    println(x &^ y)
+    println(3 &^ y)
+    println(2 / 34 &^ 2 + 23 * 2)
+
+    x &= R
+    println(x)
+    x |= R
+    println(x)
+    x >>= R
+    println(x)
+    x <<= R
+    println(x)
+    x &^= R
+    println(x)
+    x ^= R
+    println(x)
+}
+        "#,
+        "1
+0
+46
+847
+783
+48
+846
+780
+48
+-66
+26696
+33280
+1536
+54
+0
+0
+46
+64
+0
+46
+1
+9
+0
+0
+0
+9
+",
+    )
+}
