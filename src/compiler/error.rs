@@ -57,3 +57,6 @@ impl TypeError {
         ))
     }
 }
+
+/// Errors occurred during the definition of any named values
+pub(crate) struct DefinitionError;

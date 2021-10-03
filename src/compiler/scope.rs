@@ -1,3 +1,5 @@
+use crate::compiler::error::DefinitionError;
+
 /// Scope counter and resolver
 /// Tracks the depth of a scope we are in
 /// Has the notion of all the variables inside the scope
@@ -7,6 +9,8 @@ pub(super) struct Scope {
     pub(super) vars: Vec<Local>,
     pub(super) depth: usize,
 }
+
+type ScopeDefinitionResult<T> = Result<T, DefinitionError>;
 
 impl Scope {
     pub(super) fn new() -> Self {
@@ -34,6 +38,20 @@ impl Scope {
         }
 
         false
+    }
+
+    pub(super) fn has_defined_var(&self, name: &str) -> ScopeDefinitionResult<bool> {
+        for var in &self.vars {
+            if var.is_initialised() && var.depth < self.depth as isize {
+                break;
+            } else if var.mutable && name == var.name {
+                return Ok(true);
+            } else if !var.mutable && name == var.name {
+                return Err(DefinitionError);
+            }
+        }
+
+        Ok(false)
     }
 
     pub(super) fn resolve(&self, name: &str) -> Option<(usize, bool)> {

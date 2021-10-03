@@ -301,3 +301,24 @@ func main() {
 ",
     )
 }
+
+#[test]
+fn test_var_short_multi_decl() {
+    compare_stderr_output(
+        r#"
+package main
+
+func main() {
+
+    a, b, c := "hi", [...]int{1}, 98
+    println(a,b,c)
+
+    a, b, c, t := "hello", [...]int{2}, 1, 888
+    println(a,b,c,t)
+}
+        "#,
+        "hi <[1]int>[1] 98
+hello <[1]int>[2] 1 888
+",
+    )
+}

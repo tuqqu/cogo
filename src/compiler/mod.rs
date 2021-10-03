@@ -182,11 +182,39 @@ impl<'a> Compiler<'a> {
     }
 
     fn expr_decl_short_var(&mut self) {
-        let name = self.parse_name().to_string();
+        let mut names: Vec<String> = vec![];
+        let mut no_new;
+        loop {
+            let name = self.parse_name().to_string();
+
+            match self.scope.has_defined_var(&name) {
+                Ok(has_defined) => no_new = has_defined,
+                Err(_) => {
+                    // to prevent the meaningless now error message
+                    no_new = false;
+                    self.err(format!("cannot assign to \"{}\"", name));
+                    break;
+                }
+            }
+
+            self.scope.add_var(name.clone());
+            names.push(name);
+
+            if !self.consume_if(Token::Comma) {
+                break;
+            }
+        }
+
+        if no_new {
+            self.err("no new variables on left side of :=".to_string());
+        }
+
         self.consume(Token::ColonEqual);
-        self.decl_scoped_name(name.clone());
         self.expr();
-        self.def_var(name, None, false, true, 0);
+
+        for (i, name) in names.iter().enumerate() {
+            self.def_var(name.clone(), None, false, true, i);
+        }
     }
 
     //FIXME change flags
@@ -448,10 +476,6 @@ impl<'a> Compiler<'a> {
         &self.lexemes[self.current - 1]
     }
 
-    fn next(&self) -> &Lexeme {
-        &self.lexemes[self.current + 1]
-    }
-
     fn consume(&mut self, tok: Token) {
         if self.current().token == tok {
             self.advance();
@@ -475,10 +499,6 @@ impl<'a> Compiler<'a> {
 
     fn check(&mut self, tok: Token) -> bool {
         self.current().token == tok
-    }
-
-    fn check_next(&mut self, tok: Token) -> bool {
-        self.next().token == tok
     }
 
     fn check_in(&mut self, toks: &[Token]) -> bool {
@@ -567,7 +587,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn expr_simple(&mut self) {
-        if self.check(Token::Identifier) && self.check_next(Token::ColonEqual) {
+        if self.check_rhs(Token::ColonEqual) {
             self.expr_decl_short_var();
         } else {
             self.expr_expr();
