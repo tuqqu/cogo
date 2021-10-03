@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::rc::Rc;
 
-use cogo::compiler::{compile, ErrorHandler};
-use cogo::vm::io::StdStreamProvider;
-use cogo::vm::Vm;
+use cogo_compiler::{compile, ErrorHandler};
+use cogo_vm::io::StdStreamProvider;
+use cogo_vm::{CUnitFrame, Vm};
 
 struct TestErrorHandler(Vec<String>);
 
@@ -36,7 +36,8 @@ pub fn compare_stderr_output(program: &str, expected_stderr: &str) {
     let stream_provider = StdStreamProvider::new(Some((Some(stdout), Some(stderr), None)));
 
     let mut err_handler = TestErrorHandler::new();
-    let frame = compile(program, &mut err_handler);
+    let cunit = compile(program, &mut err_handler);
+    let frame = CUnitFrame::new(cunit);
 
     assert!(err_handler.errs().is_empty());
 

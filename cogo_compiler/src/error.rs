@@ -1,7 +1,7 @@
 use std::{error, fmt};
 
-use super::ValType;
 use crate::lex::lexeme::Pos;
+use crate::ValType;
 
 /// Errors occurred during the compilation process
 #[derive(Debug, Clone, PartialEq)]

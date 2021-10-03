@@ -1,7 +1,7 @@
 use std::{env, fs, process};
 
-use cogo::compiler::{compile, ToStderrErrorHandler};
-use cogo::vm::Vm;
+use cogo_compiler::{compile, ToStderrErrorHandler};
+use cogo_vm::{CUnitFrame, Vm};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -31,7 +31,8 @@ fn main() {
         )
     });
 
-    let frame = compile(&contents, &mut ToStderrErrorHandler);
+    let cunit = compile(&contents, &mut ToStderrErrorHandler);
+    let frame = CUnitFrame::new(cunit);
 
     //fixme
     if debug {

@@ -2,10 +2,11 @@
 use std::io::Write;
 use std::{char, result};
 
-use super::error::VmError;
-use super::io::StreamProvider;
-use super::Vm;
-use crate::compiler::{ValType, Value};
+use cogo_compiler::{ValType, Value};
+
+use crate::error::VmError;
+use crate::io::StreamProvider;
+use crate::Vm;
 
 pub(super) struct FuncBuiltin {
     name: &'static str,

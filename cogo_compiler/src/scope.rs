@@ -1,4 +1,4 @@
-use crate::compiler::error::DefinitionError;
+use crate::error::DefinitionError;
 
 /// Scope counter and resolver
 /// Tracks the depth of a scope we are in

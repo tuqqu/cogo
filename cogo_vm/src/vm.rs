@@ -2,19 +2,14 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
 use std::result;
 
-use self::builtin::FuncBuiltin;
-use self::error::VmError;
-use self::io::{StdStreamProvider, StreamProvider};
-use self::name_table::NameTable;
-use self::stack::VmStack;
-use crate::compiler::unit::{CompilationUnit as CUnit, FuncUnit};
-use crate::compiler::{OpCode, ValType, Value};
+use cogo_compiler::{CompilationUnit as CUnit, FuncUnit, OpCode, ValType, Value};
 
-mod builtin;
-mod error;
-pub mod io;
-mod name_table;
-mod stack;
+use crate::builtin::FuncBuiltin;
+use crate::error;
+use crate::error::VmError;
+use crate::io::{StdStreamProvider, StreamProvider};
+use crate::name_table::NameTable;
+use crate::stack::VmStack;
 
 #[derive(Debug)]
 enum VmNamedValue {
@@ -44,7 +39,7 @@ type VmRuntimeCall<T> = std::result::Result<T, VmError>;
 pub struct Vm {
     globals: NameTable<VmNamedValue>,
     names: NameTable<FuncUnit>,
-    builtins: NameTable<FuncBuiltin>,
+    pub(crate) builtins: NameTable<FuncBuiltin>,
     std_streams: Box<dyn StreamProvider>,
     stack: VmStack<Value>,
     frames: VmStack<Rc<RefCell<CUnitFrame>>>,
@@ -704,7 +699,7 @@ pub struct CUnitFrame {
 }
 
 impl CUnitFrame {
-    pub(crate) fn new(cunit: CUnit) -> Self {
+    pub fn new(cunit: CUnit) -> Self {
         Self {
             cunit,
             pointer: 0,

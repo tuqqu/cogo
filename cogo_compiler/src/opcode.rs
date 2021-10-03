@@ -1,8 +1,7 @@
 use std::fmt;
 
-use super::unit::CompilationUnit;
-use super::{ValType, Value};
 use crate::lex::lexeme::Pos;
+use crate::{CompilationUnit, ValType, Value};
 
 #[derive(Debug, Clone)]
 pub enum OpCode {
@@ -126,7 +125,7 @@ impl Chunk {
         self.codes.pop()
     }
 
-    pub(crate) fn codes(&self) -> &[OpCode] {
+    pub fn codes(&self) -> &[OpCode] {
         &self.codes
     }
 }

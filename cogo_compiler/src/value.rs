@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::mem;
 use std::rc::Rc;
 
-use super::{TypeError, ValType};
+use crate::{TypeError, ValType};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]

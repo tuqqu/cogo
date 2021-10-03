@@ -1,10 +1,10 @@
 use std::fmt::Formatter;
 use std::{fmt, io};
 
-use super::name_table::NameError;
-use super::stack::StackUnderflow;
-use crate::compiler::unit::CompilationUnit;
-use crate::compiler::{TypeError, ValType};
+use cogo_compiler::{CompilationUnit, TypeError, ValType};
+
+use crate::name_table::NameError;
+use crate::stack::StackUnderflow;
 
 /// Errors occurred in the virtual machine runtime.
 #[derive(Debug)]

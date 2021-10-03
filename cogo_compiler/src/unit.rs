@@ -1,6 +1,6 @@
-use super::opcode::Chunk;
-use super::structure::{Function as FunctionItem, Package as PackageItem};
-use super::vtype::{CompositeType, FuncType};
+use crate::opcode::Chunk;
+use crate::structure::{Function as FunctionItem, Package as PackageItem};
+use crate::vtype::{CompositeType, FuncType};
 
 /// Chunk of Opcodes which belongs to either a function or a package
 #[derive(Clone, Debug)]
@@ -14,14 +14,14 @@ impl CompilationUnit {
     const FUNCTION: &'static str = "function";
 
     /// Used to output nicer compilation failure messages
-    pub(crate) fn cunit_type(&self) -> &str {
+    pub fn cunit_type(&self) -> &str {
         match &self {
             Self::Package(_) => Self::PACKAGE,
             Self::Function(_) => Self::FUNCTION,
         }
     }
 
-    pub(crate) fn chunk(&self) -> &Chunk {
+    pub fn chunk(&self) -> &Chunk {
         match &self {
             Self::Package(p) => &p.codes,
             Self::Function(f) => &f.codes,
@@ -83,19 +83,19 @@ impl FuncUnit {
         }
     }
 
-    pub(crate) fn ret_type(&self) -> &CompositeType {
+    pub fn ret_type(&self) -> &CompositeType {
         self.ftype.ret_type()
     }
 
-    pub(crate) fn argc(&self) -> usize {
+    pub fn argc(&self) -> usize {
         self.ftype.args().len()
     }
 
-    pub(crate) fn is_variadic(&self) -> bool {
+    pub fn is_variadic(&self) -> bool {
         self.ftype.variadic()
     }
 
-    pub(crate) fn function(&self) -> &FunctionItem {
+    pub fn function(&self) -> &FunctionItem {
         &self.function
     }
 }

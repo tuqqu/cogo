@@ -1,10 +1,10 @@
-use super::unit::FuncUnit;
+use crate::FuncUnit;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Package(pub String);
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Function(pub String);
+pub struct Function(pub String);
 
 /// Entry point validation and check.
 pub(super) struct EntryPoint {
@@ -49,10 +49,9 @@ impl EntryPoint {
 
 #[cfg(test)]
 mod tests {
-    use super::super::vtype::FuncType;
-    use super::super::ValType;
     use super::*;
-    use crate::compiler::vtype::CompositeType;
+    use crate::vtype::{CompositeType, FuncType};
+    use crate::ValType;
 
     #[test]
     fn test_entry_point_check() {

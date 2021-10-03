@@ -1,31 +1,16 @@
 use std::mem;
 
-use self::error::CompileError;
-pub(crate) use self::error::TypeError;
-pub use self::error::{ErrorHandler, ToStderrErrorHandler};
-use self::flow::ControlFlow;
-pub(crate) use self::opcode::OpCode;
-use self::scope::Scope;
-use self::structure::{EntryPoint, Function, Package};
-use self::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
-pub(crate) use self::value::Value;
-pub(crate) use self::vtype::ValType;
-use self::vtype::{FuncType, ParamType};
-use crate::compiler::vtype::CompositeType;
+use crate::error::CompileError;
+use crate::flow::ControlFlow;
 use crate::lex::lexeme::{Lexeme, Token};
 use crate::lex::Lexer;
-use crate::vm::CUnitFrame;
+use crate::scope::Scope;
+use crate::structure::{EntryPoint, Function, Package};
+use crate::unit::{CompilationUnit as CUnit, FuncUnit, PackageUnit};
+use crate::vtype::{CompositeType, FuncType, ParamType};
+use crate::{ErrorHandler, OpCode, ValType, Value};
 
-pub(crate) mod error;
-mod flow;
-mod opcode;
-mod scope;
-mod structure;
-pub(crate) mod unit;
-mod value;
-mod vtype;
-
-pub fn compile(src: &str, err_handler: &mut dyn ErrorHandler) -> CUnitFrame {
+pub fn compile(src: &str, err_handler: &mut dyn ErrorHandler) -> CUnit {
     let mut lexer = Lexer::new(src);
     let (lexemes, errors) = lexer.lex();
 
@@ -40,7 +25,7 @@ pub fn compile(src: &str, err_handler: &mut dyn ErrorHandler) -> CUnitFrame {
         err_handler.on_error(errors);
     }
 
-    CUnitFrame::new(cunit)
+    cunit
 }
 
 struct Compiler<'a> {

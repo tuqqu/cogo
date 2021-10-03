@@ -108,11 +108,11 @@ impl CompositeType {
         self.0.is_empty()
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
     }
 
-    pub(crate) fn types(&self) -> &[ValType] {
+    pub fn types(&self) -> &[ValType] {
         &self.0
     }
 }
