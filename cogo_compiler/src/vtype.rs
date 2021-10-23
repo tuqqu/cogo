@@ -72,7 +72,7 @@ impl ValType {
             Self::String => str::to_string(Self::TYPE_STRING),
             Self::Array(vtype, size) => format!("[{}]{}", size, vtype),
             Self::Slice(vtype) => format!("[]{}", vtype),
-            Self::Func(f_type) => f_type.name(),
+            Self::Func(f_type) => f_type.to_string(),
             Self::Struct(name) => str::to_string(name),
         }
     }
@@ -165,7 +165,7 @@ impl FuncType {
 
     fn name(&self) -> String {
         format!(
-            "{}({}){}",
+            "{} ({}){}",
             ValType::TYPE_FUNC,
             self.args
                 .iter()
@@ -192,5 +192,63 @@ impl FuncType {
 impl PartialEq for FuncType {
     fn eq(&self, other: &Self) -> bool {
         self.args == other.args && self.ret_type == other.ret_type
+    }
+}
+
+impl fmt::Display for FuncType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_composite_type() {
+        let ct = CompositeType::new_void();
+        assert_eq!("".to_string(), ct.to_string());
+
+        let ct = CompositeType::new_trivial(ValType::Int8);
+        assert_eq!("int8".to_string(), ct.to_string());
+
+        let ct = CompositeType::new(vec![
+            ValType::Int,
+            ValType::String,
+            ValType::Array(Box::new(ValType::Float32), 4),
+        ]);
+        assert_eq!("(int, string, [4]float32)".to_string(), ct.to_string());
+    }
+
+    #[test]
+    fn test_param_type() {
+        let pt = ParamType(ValType::String, true);
+        assert_eq!("...string".to_string(), pt.to_string());
+
+        let pt = ParamType(ValType::String, false);
+        assert_eq!("string".to_string(), pt.to_string());
+    }
+
+    #[test]
+    fn test_func_type() {
+        let pt_a = ParamType(ValType::String, false);
+        let pt_b = ParamType(ValType::Uint, true);
+
+        let ct_a = CompositeType::new_trivial(ValType::Bool);
+        let ct_b = CompositeType::new_void();
+        let ct_c = CompositeType::new(vec![ValType::Int, ValType::String]);
+
+        let ft = FuncType::new(vec![pt_a.clone(), pt_b.clone()], ct_a);
+        assert_eq!("func (string, ...uint)bool".to_string(), ft.to_string());
+
+        let ft = FuncType::new(vec![pt_b.clone()], ct_b);
+        assert_eq!("func (...uint)".to_string(), ft.to_string());
+
+        let ft = FuncType::new(vec![pt_a, pt_b], ct_c);
+        assert_eq!(
+            "func (string, ...uint)(int, string)".to_string(),
+            ft.to_string()
+        );
     }
 }

@@ -218,3 +218,40 @@ false 1
 ",
     )
 }
+
+#[test]
+fn test_func_shared_param_type() {
+    compare_stderr_output(
+        r#"
+package main
+
+func main() {
+    var a = f1(1, 2)
+    println(a)
+
+    f2(true, false, true, "hi", "hello")
+
+    b := []int{22, 33, 44}
+
+    f3([]int{2, 3, 4}, b, "hi", 1, 2, 3, 4, 5)
+}
+
+func f1(x, y int) int {
+    return x + y * 666
+}
+
+func f2(x,y,z bool, a, b string) string {
+    println(x, y, z, a, b)
+    return "string"
+}
+
+func f3(a , b []int, c string, z ...int) {
+    println(a, b, c, z)
+}
+        "#,
+        "1333
+true false true hi hello
+<[]int>[2 3 4] <[]int>[22 33 44] hi <int>[1 2 3 4 5]
+",
+    )
+}

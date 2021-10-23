@@ -294,45 +294,57 @@ impl<'a> Compiler<'a> {
         self.begin_scope();
         self.consume(Token::LeftParen);
 
+        let mut param_count: u16 = 0;
         let mut param_names = Vec::<String>::new();
         let mut param_types = Vec::<ParamType>::new();
         let mut is_func_variadic = false;
 
         if !self.check(Token::RightParen) {
             loop {
-                if param_names.len() > FuncUnit::MAX_ARGC as usize {
+                if param_count > FuncUnit::MAX_ARGC as u16 {
                     self.err("Maximum parameter count reached.".to_string());
                 }
 
                 // no anonymous parameter support yet
                 let param_name = String::from(self.parse_name());
+                param_names.push(param_name);
                 let is_param_variadic = self.parse_variadic();
-                let vtype = self.parse_type();
 
-                param_names.push(param_name.clone());
-                param_types.push(ParamType(vtype.clone(), is_param_variadic));
+                if !self.check(Token::Comma) {
+                    let vtype = self.parse_type();
 
-                self.decl_scoped_name(param_name.clone());
+                    for param_name in &param_names {
+                        param_types.push(ParamType(vtype.clone(), is_param_variadic));
 
-                let var_type;
-                if is_param_variadic {
-                    // if it is a variadic parameter, we must define variable of a slice type instead
-                    var_type = ValType::Slice(Box::new(vtype));
-                    if is_func_variadic {
-                        self.err("Function cannot have multiple variadic parameters".to_string());
-                        break;
+                        let var_type;
+                        if is_param_variadic {
+                            // if it is a variadic parameter, we must define variable of a slice type instead
+                            var_type = ValType::Slice(Box::new(vtype.clone()));
+                            if is_func_variadic {
+                                self.err(
+                                    "Function cannot have multiple variadic parameters".to_string(),
+                                );
+                                break;
+                            }
+                            is_func_variadic = true;
+                        } else {
+                            var_type = vtype.clone();
+                            if is_func_variadic {
+                                self.err(
+                                    "Function must not have non-final variadic parameter"
+                                        .to_string(),
+                                );
+                                break;
+                            }
+                        }
+
+                        self.decl_scoped_name(param_name.clone());
+                        // It neither is a global scope nor a validation case, so no codes are added here
+                        self.def_var(param_name.clone(), Some(var_type), false, false, 0);
                     }
-                    is_func_variadic = true;
-                } else {
-                    var_type = vtype;
-                    if is_func_variadic {
-                        self.err("Function must not have non-final variadic parameter".to_string());
-                        break;
-                    }
-                }
 
-                // It neither is a global scope nor a validation case, so no codes are added here
-                self.def_var(param_name, Some(var_type), false, false, 0);
+                    param_names.clear();
+                };
 
                 if !self.consume_if(Token::Comma) {
                     break;
@@ -341,6 +353,8 @@ impl<'a> Compiler<'a> {
                 if self.check(Token::RightParen) {
                     break;
                 }
+
+                param_count += 1;
             }
         }
 

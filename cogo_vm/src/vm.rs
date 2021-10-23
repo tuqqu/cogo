@@ -183,6 +183,8 @@ impl Vm {
                         for val in vals {
                             self.stack.push(val);
                         }
+                    } else {
+                        ignore_next_pop = true;
                     }
                     // we don't want to increment the frame pointer
                     continue;
